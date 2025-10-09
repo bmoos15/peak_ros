@@ -1,0 +1,64 @@
+peak_address:    "10.1.1.2"
+peak_port:             1067
+
+acquisition_rate:        15
+digitisation_rate:      100 # 0, 10, 25, 50 or 100 (0 = use default)
+frame_id: "ltpa"
+
+profile:              false     # Profiling output for PeakNodelet::takeMeasurement()
+
+
+
+boundary_conditions:
+
+  n_focals:              63     # number of focal laws (num_elements - aperture + 1)
+  element_pitch:          0.5   # mm
+  inter_element_spacing:  0.1   # mm
+  element_width:         10.0   # mm
+  
+  immersion:             true   #If true, acoustic velocity will be assumed 1500 m/s before frontwall and vel_material after 
+
+  vel_wedge:           2430.0   # m/s
+  wedge_angle:            0.0   # degrees
+  wedge_depth:            0.0   # mm
+  couplant_depth:         0.0   # mm
+  specimen_depth:         0.0  # mm
+  vel_couplant:        1500.0   # m/s Water
+
+#  vel_material:        5000.0   # m/s Steel
+  # vel_material:          6070.0   #m/s Titanium
+  vel_material:         6420.0   # m/s Aluminium
+  # vel_material:           1500.0   #m/s Water
+  # vel_material:         1700.0   # m/s CF
+
+
+tcg:
+  use_tcg:             true
+  # Amplify by tcg_n dB every tcg_l mm up to a maximum of tcg_limit normalised amplitude
+  amp_factor:             1.0   # dB
+  depth_factor:          25.0   # mm
+  tcg_limit:              0.8
+
+gates:
+  gate_front_wall:        0.5  # 0 to 1
+  depth_to_skip:          6.0   # mm
+  gate_back_wall:         0.7   # 0 to 1
+  max_depth:             10.0   # mm
+  zero_to_front_wall:  false     # Sets the gated B Scan to start at the detected frontwall
+  show_front_wall:      true    # Show front wall in the gated B Scan
+
+reconstruction:
+  process_rate:          15 # Hz - Consider interplay between this and acquisition rates
+  use_tf:              true
+  recon_frame_id: "base_link"
+  live_publish:        false
+  # recon_const_vel:     0.005 # m/s - If use_tf == false
+  # flip_direction:      true    #       If use_tf == false
+
+# reconstruction:
+#   process_rate:          15 # Hz - Consider interplay between this and acquisition rates
+#   use_tf:              true
+#   recon_frame_id:     "plot"
+#   live_publish:        true
+#   recon_const_vel:        0.05 # m/s - If use_tf == false
+#   flip_direction:      true    #       If use_tf == false
