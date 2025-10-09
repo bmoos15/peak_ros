@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+    <!-- Launch file to play processed bag file with visualization -->
+    <!-- Bag starts PAUSED - press SPACE in the rosbag terminal to start playback -->
+    
+    <!-- Argument for bag file path -->
+    <arg name="bag_file" default="$(find peak_ros)/bags/processed_data14_2025-12-17-11-09-08.bag" />
+    <arg name="rviz_config" default="$(find peak_ros)/config/post_process2.rviz" />
+    <arg name="play_rate" default="1.0" />
+    <arg name="loop" default="false" />
+    
+    <!-- Use simulation time from bag -->
+    <param name="/use_sim_time" value="true" />
+    
+    <!-- Play the bag file PAUSED with clock -->
+    <!-- Press SPACE in the terminal to start playback after RViz loads -->
+    <node pkg="rosbag" type="play" name="rosbag_play" output="screen"
+          args="--pause -r $(arg play_rate) $(arg bag_file) --loop" if="$(arg loop)" />
+    
+    <node pkg="rosbag" type="play" name="rosbag_play" output="screen"
+          args="--pause -r $(arg play_rate) $(arg bag_file)" unless="$(arg loop)" />
+    
+    <!-- RViz for visualization -->
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(arg rviz_config)" />
+    
+    <!-- 
+    USAGE:
+    1. Launch this file
+    2. Wait for RViz to fully load
+    3. Press SPACE in the terminal where you launched to start bag playback
+    4. Transforms should now appear correctly
+    -->
+</launch>

@@ -88,5 +88,10 @@
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>tf2_sensor_msgs</exec_depend>
   <exec_depend>visualization_msgs</exec_depend>
+  <depend>tf2_geometry_msgs</depend>
+
+  <!-- Dynamic variables  -->
+  <build_depend>dynamic_reconfigure</build_depend>
+  <exec_depend>dynamic_reconfigure</exec_depend>
 
 </package>

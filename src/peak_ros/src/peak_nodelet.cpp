@@ -7,7 +7,8 @@ PeakNodelet::PeakNodelet()
   : rate_(10),
     ns_("/peak"), // TODO: Figure out how to get this when using nodelets so it isn't hardcoded
     peak_handler_(),
-    stream_(false)
+    stream_(false),
+    frontwall_angle_(0.0f)
 {
 }
 
@@ -17,6 +18,7 @@ void PeakNodelet::onInit()
     NODELET_INFO_STREAM(node_name_ << ": Initialising node...");
 
     ros::NodeHandle &nh_ = getMTNodeHandle();
+    ros::NodeHandle &private_nh_ = getMTPrivateNodeHandle();
     node_name_ = getName();
     //ns_ = ros::this_node::getNamespace();
     package_path_ = ros::package::getPath("peak_ros");
@@ -31,19 +33,19 @@ void PeakNodelet::onInit()
    // TODO: Move to using smart pointers, mutex, futures or semiphors
    // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ltpa_data_ptr_ = peak_handler_.ltpa_data_ptr();
-
     rate_ = ros::Rate(acquisition_rate_);
+
     PeakNodelet::paramHandler(ns_ + "/settings/digitisation_rate", digitisation_rate_);
     PeakNodelet::paramHandler(ns_ + "/settings/profile", profile_);
-
     PeakNodelet::paramHandler(ns_ + "/settings/tcg/use_tcg", use_tcg_);
+
+    //Load initial values from YAML
     PeakNodelet::paramHandler(ns_ + "/settings/tcg/amp_factor", amp_factor_);
     PeakNodelet::paramHandler(ns_ + "/settings/tcg/depth_factor", depth_factor_);
     PeakNodelet::paramHandler(ns_ + "/settings/tcg/tcg_limit", tcg_limit_);
     depth_factor_ = depth_factor_ * 0.001f;
 
     PeakNodelet::paramHandler(ns_ + "/settings/boundary_conditions/immersion", immersion_);
-
     PeakNodelet::paramHandler(ns_ + "/settings/gates/gate_front_wall", gate_front_wall_);
     PeakNodelet::paramHandler(ns_ + "/settings/gates/depth_to_skip", depth_to_skip_);
     PeakNodelet::paramHandler(ns_ + "/settings/gates/gate_back_wall", gate_back_wall_);
@@ -52,6 +54,11 @@ void PeakNodelet::onInit()
     PeakNodelet::paramHandler(ns_ + "/settings/gates/show_front_wall", show_front_wall_);
     depth_to_skip_ = depth_to_skip_ * 0.001f;
     max_depth_ = max_depth_ * 0.001f;
+
+    //Set up dynamic reconfigure server
+    dr_callback_ = boost::bind(&PeakNodelet::reconfigureCallback, this, _1, _2);
+    dr_server_.reset(new dynamic_reconfigure::Server<peak_ros::dynamic_variablesConfig>(private_nh_));
+    dr_server_->setCallback(dr_callback_);
 
     initHardware();
 
@@ -66,6 +73,10 @@ void PeakNodelet::onInit()
     gated_bscan_publisher_ =  nh_.advertise<sensor_msgs::PointCloud2>(ns_ + "/gated_b_scan", 100, true);
     gate_top_publisher_ =     nh_.advertise<sensor_msgs::PointCloud2>(ns_ + "/gate_top", 100, true);
     gate_bottom_publisher_ =  nh_.advertise<sensor_msgs::PointCloud2>(ns_ + "/gate_bottom", 100, true);
+    depth_marker_publisher_ = nh_.advertise<visualization_msgs::Marker>(ns_ + "/depth_text_marker", 10, true);
+    angle_marker_publisher_ = nh_.advertise<visualization_msgs::Marker>(ns_ + "/angle_text_marker", 10, true);
+    frontwall_depth_publisher_ = nh_.advertise<std_msgs::Float32>(ns_ + "/frontwall_depth", 10, true);    
+    frontwall_angle_publisher_ = nh_.advertise<std_msgs::Float32>(ns_ + "/frontwall_angle", 10, true);
 
     single_measure_service_ = nh_.advertiseService(ns_ + "/take_single_measurement", &PeakNodelet::takeMeasurementSrvCb, this);
     stream_service_ =         nh_.advertiseService(ns_ + "/stream_data", &PeakNodelet::streamDataSrvCb, this);
@@ -76,8 +87,20 @@ void PeakNodelet::onInit()
 }
 
 
-//PeakNodelet::~PeakNodelet() {
-//}
+void PeakNodelet::reconfigureCallback(peak_ros::dynamic_variablesConfig &config, uint32_t level)
+{
+    NODELET_INFO("Reconfigure Request:");
+    NODELET_INFO("  amp_factor: %.2f, depth_factor: %.2f", config.amp_factor, config.depth_factor);
+    NODELET_INFO("  gate_front_wall: %.2f, depth_to_skip: %.2f, gate_back_wall: %.2f", 
+                 config.gate_front_wall, config.depth_to_skip, config.gate_back_wall);
+    
+    // Update the member variables with new values
+    amp_factor_ = config.amp_factor;
+    depth_factor_ = config.depth_factor * 0.001f;  // Convert mm to m
+    gate_front_wall_ = config.gate_front_wall;
+    depth_to_skip_ = config.depth_to_skip * 0.001f;  // Convert mm to m
+    gate_back_wall_ = config.gate_back_wall;
+}
 
 
 template <typename ParamType>
@@ -217,6 +240,129 @@ void PeakNodelet::prePopulateGateBottomMessage() {
     gate_bottom_cloud_.height = 1;
     gate_bottom_cloud_.is_dense = true;
     gate_bottom_cloud_.point_step = fields * bytes_per_field;
+}
+
+void PeakNodelet::publishDepthMarker(float avg_depth) {
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = "frontwall_depth";
+    marker.header.stamp = ros::Time::now();
+    marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+    marker.action = visualization_msgs::Marker::ADD;
+    
+    marker.pose.position.x = 0.0;
+    marker.pose.position.y = 0.0;
+    marker.pose.position.z = 0.0;
+    marker.pose.orientation.w = 1.0;
+    
+    // Format the text (depth in meters, converted to mm for display)
+    std::stringstream ss;
+    ss << std::fixed << std::setprecision(2) << "Average Frontwall Depth: " << (avg_depth * 1000.0f) << " mm";
+    marker.text = ss.str();
+    
+    marker.scale.z = 0.01;
+    
+    marker.color.r = 1.0;
+    marker.color.g = 1.0;
+    marker.color.b = 1.0;
+    marker.color.a = 1.0;
+    
+    marker.id = 0;
+    marker.ns = "depth_measurement";
+    
+    depth_marker_publisher_.publish(marker);
+}
+
+void PeakNodelet::publishAngleMarker(float frontwall_angle) {
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = "frontwall_angle";
+    marker.header.stamp = ros::Time::now();
+    marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+    marker.action = visualization_msgs::Marker::ADD;
+    
+    marker.pose.position.x = 0.0;
+    marker.pose.position.y = 0.0;
+    marker.pose.position.z = 0.0;  // Offset slightly from depth marker
+    marker.pose.orientation.w = 1.0;
+    
+    // Format the text
+    std::stringstream ss;
+    ss << std::fixed << std::setprecision(2) << "Frontwall Angle: " << frontwall_angle << " Degrees";
+    marker.text = ss.str();
+    
+    marker.scale.z = 0.01;
+    
+    marker.color.r = 1.0;
+    marker.color.g = 1.0;
+    marker.color.b = 0.0;  // Yellow color to differentiate from depth
+    marker.color.a = 1.0;
+    
+    marker.id = 1;
+    marker.ns = "angle_measurement";
+    
+    angle_marker_publisher_.publish(marker);
+}
+
+float PeakNodelet::calculateFrontwallAngleRANSAC(const std::vector<float>& y_positions, 
+                                                  const std::vector<float>& depths) {
+    if (y_positions.size() < 2 || y_positions.size() != depths.size()) {
+        return 0.0f;
+    }
+    
+    int n = y_positions.size();
+    int best_inliers = 0;
+    float best_slope = 0.0f;
+    float best_intercept = 0.0f;
+    
+    // RANSAC iterations
+    for (int iter = 0; iter < ransac_iterations_; ++iter) {
+        // Randomly select two points
+        int idx1 = rand() % n;
+        int idx2 = rand() % n;
+        
+        // Ensure different points
+        while (idx2 == idx1) {
+            idx2 = rand() % n;
+        }
+        
+        float y1 = y_positions[idx1];
+        float z1 = depths[idx1];
+        float y2 = y_positions[idx2];
+        float z2 = depths[idx2];
+        
+        // Calculate line parameters: z = slope * y + intercept
+        float dy = y2 - y1;
+        if (std::abs(dy) < 1e-12f) {
+            continue;  // Points too close in y, skip
+        }
+        
+        float slope = (z2 - z1) / dy;
+        float intercept = z1 - slope * y1;
+        
+        // Count inliers
+        int inliers = 0;
+        for (int i = 0; i < n; ++i) {
+            float predicted_z = slope * y_positions[i] + intercept;
+            float error = std::abs(depths[i] - predicted_z);
+            
+            if (error < ransac_threshold_) {
+                inliers++;
+            }
+        }
+        
+        // Update best model if this is better
+        if (inliers > best_inliers) {
+            best_inliers = inliers;
+            best_slope = slope;
+            best_intercept = intercept;
+        }
+    }
+    
+    // Convert slope to angle in degrees
+    // slope = dz/dy, so angle = atan(dz/dy)
+    float angle_rad = std::atan(best_slope);
+    float angle_deg = angle_rad * 180.0f / M_PI;
+    
+    return angle_deg;
 }
 
 bool PeakNodelet::streamDataSrvCb(peak_ros::StreamData::Request& request,
@@ -424,6 +570,10 @@ void PeakNodelet::populateBScanMessage(const peak_ros::Observation& obs_msg) {
     float tof;
 
     int element_i = 0;
+    
+    // Clear previous measurement data for this frame
+    std::vector<float> current_frame_depths;
+    std::vector<float> current_frame_positions;
 
     for (const auto& ascan : obs_msg.ascans) {
         bool    found_front_wall = false;
@@ -442,26 +592,6 @@ void PeakNodelet::populateBScanMessage(const peak_ros::Observation& obs_msg) {
         int i = 0;
         int t = 0; 
         for (auto amplitude : ascan.amplitudes) {
-            // GAT(S) --- GAT <Tn> <Gate Start> <Gate End>
-            // Defines search gate start and end positions for the specified test.
-            // By default, the gate units are in machine units.
-            // A machine unit is defined by the digitisation rate (i.e. 10nSec for 100MHz digitisation).
-            // Maybe assume 100 MHz to start with...
-            // double t = (double)i * dt;
-            // double z = 0.0;
-            // if (t < time_in_wedge) {
-            //     z = t * obs_msg.vel_wedge;
-            // } else if (t < time_in_couplant) {
-            //     z = (t - time_in_wedge) * obs_msg.vel_couplant
-            //          + obs_msg.wedge_depth;
-            // } else if (t < time_in_specimen) {
-            //     z = (t - time_in_wedge - time_in_couplant) * obs_msg.vel_couplant
-            //          + obs_msg.wedge_depth
-            //          + obs_msg.couplant_depth;
-            // }
-
-
-
             x = 0.0f;
             y = (float)((float)element_i * (float)obs_msg.element_pitch * 0.001f); // mm to m
             z = (float)((float)i * (float)n * dt / 2.0f);
@@ -470,8 +600,6 @@ void PeakNodelet::populateBScanMessage(const peak_ros::Observation& obs_msg) {
             if (immersion_ and n != 1500){
                 z = z + (float)((float)t * 1500 * dt / 2.0f) - (float)((float)t * (float)obs_msg.vel_material * dt / 2.0f);
             }
-            
-
             
             tof = z;
 
@@ -492,14 +620,8 @@ void PeakNodelet::populateBScanMessage(const peak_ros::Observation& obs_msg) {
                 amplitude = amplitude_tcg;
             }
 
-            // Raw Amplitude
-            // normalised_amplitude = (float)amplitude;
-
             // Normalised on Linear Scale
             normalised_amplitude = (float)amplitude / (float)obs_msg.max_amplitude;
-
-            // Normalised on dB Scale
-            // normalised_amplitude = 20.0 * (float)log10( (float)abs( (float)amplitude / (float)obs_msg.max_amplitude) );
 
             *bscan_iterX = x;
             *bscan_iterY = y;
@@ -540,7 +662,7 @@ void PeakNodelet::populateBScanMessage(const peak_ros::Observation& obs_msg) {
 
 
             // Back wall gate
-            } else if (found_front_wall and !found_back_wall and 
+            } else if (found_front_wall and 
                        z < max_depth_ + depth_front_wall + depth_to_skip_ and
                        z > (depth_to_skip_ + depth_front_wall) and 
                        normalised_amplitude > gate_back_wall_) {
@@ -604,7 +726,61 @@ void PeakNodelet::populateBScanMessage(const peak_ros::Observation& obs_msg) {
 
             ++i;
         }
+        
+        // Store front wall data for this A-scan for angle calculation
+        if (found_front_wall && !std::isnan(depth_front_wall)) {
+            float y_position = (float)element_i * (float)obs_msg.element_pitch * 0.001f; // mm to m
+            current_frame_depths.push_back(depth_front_wall);
+            current_frame_positions.push_back(y_position);
+        }
+        
         ++element_i;
+    }
+    
+    // Calculate average depth and angle from current frame data
+    if (!current_frame_depths.empty()) {
+        // Calculate average depth
+        float sum_depth = 0.0f;
+        for (const auto& depth : current_frame_depths) {
+            sum_depth += depth;
+        }
+        float avg_depth = sum_depth / current_frame_depths.size();
+        
+        // // Add current frame data to rolling buffer
+        // depth_front_wall_values_.insert(depth_front_wall_values_.end(), 
+        //                                 current_frame_depths.begin(), 
+        //                                 current_frame_depths.end());
+        // element_positions_.insert(element_positions_.end(),
+        //                          current_frame_positions.begin(),
+        //                          current_frame_positions.end());
+        
+        // // Keep only the last N samples for moving average
+        // while (depth_front_wall_values_.size() > max_depth_samples_) {
+        //     depth_front_wall_values_.erase(depth_front_wall_values_.begin());
+        //     element_positions_.erase(element_positions_.begin());
+        // }
+        
+        // Calculate angle using RANSAC if we have enough points
+        if (current_frame_depths.size() >= 10) {  // Minimum 10 points for RANSAC
+            frontwall_angle_ = calculateFrontwallAngleRANSAC(current_frame_positions, 
+                                                             current_frame_depths);
+            
+            // Publish angle as text marker
+            publishAngleMarker(frontwall_angle_);
+            
+            // Publish angle as Float32 message
+            std_msgs::Float32 angle_msg;
+            angle_msg.data = frontwall_angle_;
+            frontwall_angle_publisher_.publish(angle_msg);
+        }
+        
+        // Publish depth marker
+        publishDepthMarker(avg_depth);
+
+        // Publish depth as Float32 message
+        std_msgs::Float32 depth_msg;
+        depth_msg.data = avg_depth;
+        frontwall_depth_publisher_.publish(depth_msg);
     }
 }
 

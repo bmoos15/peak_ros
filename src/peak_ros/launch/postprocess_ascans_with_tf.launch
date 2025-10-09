@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+    <!-- Arguments for bag file paths -->
+    <arg name="input_bag" default="$(find peak_ros)/bags/C_Axis_Stepped_207Gain_2025-12-16-16-25-56.bag" />
+    <!-- <arg name="input_bag" default="$(find peak_ros)/bags/C_Axis_Stepped_uncorrected_220Gain_2025-12-17-11-06-59.bag" /> -->
+    <!-- <arg name="input_bag" default="$(find peak_ros)/bags/C_Axis_Stepped_220Gain_2025-12-17-11-09-08.bag" /> -->
+    <arg name="output_bag" default="$(find peak_ros)/bags/processed_data_207Gain_2Cutoff_2025-12-16-16-25-56.bag" />
+    <!-- <arg name="output_bag" default="$(find peak_ros)/bags/processed_data_uncorrected2_2025-12-17-11-06-59.bag" /> -->
+    <!-- <arg name="output_bag" default="$(find peak_ros)/bags/processed_data15_2025-12-17-11-09-08.bag" /> -->
+    <arg name="rviz" default="true" />
+    <arg name="load_urdf" default="true" />
+    
+    <!-- Load URDF for visualization only (optional) -->
+    <!-- We don't use robot_state_publisher because it would conflict with TF from the bag -->
+    <!-- Instead, we publish static transforms for the end-effector assembly -->
+    <group if="$(arg load_urdf)">
+        <param name="robot_description" command="$(find xacro)/xacro $(find system_urdf)/urdf/system.urdf.xacro" />
+        
+        <!-- Static transforms for end-effector chain (from URDF) -->
+        <!-- These are all fixed joints, so we can use static_transform_publisher -->
+        <!-- IMPORTANT: static_transform_publisher uses: x y z yaw pitch roll parent child -->
+        <!-- URDF uses: x y z roll pitch yaw -->
+        <!-- So we need to convert: URDF rpy="R P Y" -> static_tf "Y P R" -->
+        
+        <!-- link_6 to link_coupling1: xyz="0 0 .02" rpy="-pi/2 0 0" -->
+        <!-- URDF: roll=-pi/2, pitch=0, yaw=0 -> static_tf: yaw=0, pitch=0, roll=-pi/2 -->
+        <node pkg="tf2_ros" type="static_transform_publisher" name="link_6_to_coupling1_tf" 
+            args="0 0 0.02 0 0 -1.570796 link_6 link_coupling1" />
+        
+        <!-- link_coupling1 to link_coupling2: xyz="0 0.005 0" rpy="0 0 0" -->
+        <node pkg="tf2_ros" type="static_transform_publisher" name="coupling1_to_coupling2_tf" 
+            args="0 0.005 0 0 0 0 link_coupling1 link_coupling2" />
+        
+        <!-- link_coupling2 to ft_sensor: xyz="0 0 0" rpy="-pi 0 0" -->
+        <!-- URDF: roll=-pi, pitch=0, yaw=0 -> static_tf: yaw=0, pitch=0, roll=-pi -->
+        <node pkg="tf2_ros" type="static_transform_publisher" name="coupling2_to_ft_sensor_tf" 
+            args="0 0 0 0 0 -3.14159265 link_coupling2 ft_sensor" />
+        
+        <!-- ft_sensor to link_ee: xyz="0 0.0435 0" rpy="pi 0 0" -->
+        <!-- URDF: roll=pi, pitch=0, yaw=0 -> static_tf: yaw=0, pitch=0, roll=pi -->
+        <node pkg="tf2_ros" type="static_transform_publisher" name="ft_sensor_to_link_ee_tf" 
+            args="0 0.0435 0 0 0 3.14159265 ft_sensor link_ee" />
+        
+        <!-- link_ee to probe_mount: xyz="0 0 0" rpy="-pi/2 -pi/2 0" -->
+        <!-- URDF: roll=-pi/2, pitch=-pi/2, yaw=0 -> static_tf: yaw=0, pitch=-pi/2, roll=-pi/2 -->
+        <node pkg="tf2_ros" type="static_transform_publisher" name="link_ee_to_probe_mount_tf" 
+            args="0 0 0 0 -1.570796 -1.570796 link_ee probe_mount" />
+        
+        <!-- probe_mount to tool_center_point -->
+        <!-- From URDF: xyz="0.0125 ${-(n_focals * element_pitch / (2 * 1000)) + (64 * element_pitch / (2 *1000))} -0.245" rpy="pi 0 pi/2" -->
+        <!-- With n_focals=128, element_pitch=0.5: y = -(128*0.5/2000) + (64*0.5/2000) = -0.032 + 0.016 = -0.016 -->
+        <!-- URDF: roll=pi, pitch=0, yaw=pi/2 -> static_tf: yaw=pi/2, pitch=0, roll=pi -->
+        <node pkg="tf2_ros" type="static_transform_publisher" name="probe_mount_to_tool_center_point_tf" 
+            args="0.0125 -0.01575 -0.245 1.570796 0 3.14159265 probe_mount tool_center_point" />
+    </group>
+    
+    <!-- Static Transform Publishers -->
+    <!-- World to base_link - connects world frame to robot base -->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="world_base_link_tf" 
+        args="0 0 0 0 0 0 world base_link" />
+    
+    <!-- From tool_center_point to ltpa -->
+    <!-- x value is n_focals*element_pitch/2000 = 128*0.5/2000 = 0.032 meters (offset to array center) -->
+    <!-- URDF rpy="pi/2 0 0" means: roll=pi/2, pitch=0, yaw=0 -> static_tf: yaw=0, pitch=0, roll=pi/2 -->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="ltpa_tf" 
+        args="0.03175 0 0 1.570796 0 0 tool_center_point ltpa" /> 
+    
+    <!-- From ltpa to frontwall_depth and frontwall_angle (matches peak init.launch) -->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="frontwall_depth_tf" 
+        args="0 0 -0.017 0 0 0 ltpa frontwall_depth" /> 
+    
+    <node pkg="tf2_ros" type="static_transform_publisher" name="frontwall_angle_tf" 
+        args="0 0 -0.01 0 0 0 ltpa frontwall_angle" /> 
+    
+    <!-- Post-processor node -->
+    <node name="ascan_postprocessor" pkg="peak_ros" type="ascan_postprocessor" output="screen">
+        <!-- Input/Output -->
+        <param name="input_bag" value="$(arg input_bag)" />
+        <param name="output_bag" value="$(arg output_bag)" />
+        
+        <!-- TCG Settings (match your original settings from beccas.yaml) -->
+        <param name="use_tcg" value="true" />
+        <param name="amp_factor" value="0.0" />
+        <param name="depth_factor" value="200.0" />  <!-- mm -->
+        <param name="tcg_limit" value="1.0" />
+        
+        <!-- Gate Settings (match your original settings from beccas.yaml) -->
+        <param name="gate_front_wall" value="0.7" />
+        <param name="depth_to_skip" value="35.0" />  <!-- mm -->
+        <param name="gate_back_wall" value="0.2" />
+        <param name="max_depth" value="30.0" />  <!-- mm -->
+        <param name="zero_to_front_wall" value="false" />
+        <param name="show_front_wall" value="true" />
+        
+        <!-- Boundary Conditions -->
+        <param name="immersion" value="true" />
+        
+        <!-- RANSAC Settings -->
+        <param name="ransac_iterations" value="100" />
+        <param name="ransac_threshold" value="0.001" />
+    </node>
+    
+    <!-- RViz for visualization -->
+    <node pkg="rviz" type="rviz" name="rviz_peak" args="-d $(find peak_ros)/config/post_process2.rviz" if="$(arg rviz)" />
+</launch>

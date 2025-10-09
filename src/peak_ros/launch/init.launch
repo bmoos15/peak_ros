@@ -7,16 +7,17 @@
 
     <!-- <arg name="mps_file" default="composite_roller_probe/roller_probe_wing_cover_100_MHz.mps" /> -->
     <!-- <arg name="mps_file" default="Immersion_5MHz_NoFocus.mps" /> -->
-    <!-- <arg name="mps_file" default="immersion_128el.mps" /> -->
-    <arg name="mps_file" default="immersion_64el_2aperture.mps" />
+    <arg name="mps_file" default="immersion_128el_2aperture.mps" />
+    <!-- <arg name="mps_file" default="immersion_128el_2aperture.mps" /> -->
+    <!-- <arg name="mps_file" default="immersion_64el_2aperture.mps" /> -->
     <!-- <arg name="mps_file" default="Immersion_64el_1aperture.mps" /> -->
     <!-- <arg name="mps_file" default="immersion_64el.mps" /> -->
     <!-- <arg name="mps_file" default="immersion_64el_16aperture.mps" /> -->
     <!-- <arg name="mps_file" default="Immersion_64el_24aperture.mps" /> -->
 
-    <arg name="export_pcd" default="true" />
-    <arg name="logging" default="false" />
-    <arg name="rosbag_name" default="peak_recording_corrected_alum" />
+    <arg name="export_pcd" default="false" />
+    <arg name="logging" default="true" />
+    <arg name="rosbag_name" default="C_Axis_Stepped_250Gain" />
 
     <arg name="rviz" default="true" />
 
@@ -80,17 +81,25 @@
 
 
         <!-- PCD Exporter -->
-        <node pkg="pcl_ros" type="pointcloud_to_pcd" name="peak_pointcloud_to_pcd" args="input:=/peak/detections _prefix:=$(find peak_ros)/bags/OCT7_TitaniumWAAMLong" if="$(arg export_pcd)" />
+        <node pkg="pcl_ros" type="pointcloud_to_pcd" name="peak_pointcloud_to_pcd" args="input:=/peak/detections _prefix:=$(find peak_ros)/bags/DEC/C_Axis_Corrected_35hresh_195Gain" if="$(arg export_pcd)" />
 
 
         <!-- Logging -->
-        <node pkg="rosbag" type="record" name="rosbag_peak" args="record --repeat-latched -b 1024 -o $(find peak_ros)/bags/$(arg rosbag_name) /tf /peak/a_scans /peak/b_scan /peak/gated_b_scan /peak/detections /iiwa/state/CartesianWrench" if="$(arg logging)" />
+        <node pkg="rosbag" type="record" name="rosbag_peak" args="record --repeat-latched -b 1024 -o $(find peak_ros)/bags/$(arg rosbag_name) /tf /peak/a_scans /peak/frontwall_angle /peak/frontwall_depth" if="$(arg logging)" />
         
     </group>
 
 
     <!-- Rviz -->
     <node pkg="rviz" type="rviz" name="rviz_peak" args="-d $(find peak_ros)/config/bscan.rviz" if="$(arg rviz)" />
+
+    <!-- TF for Frontwall Depth Text. Orig 0 0 1.2 0 0 0 -->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="frontwall_depth_tf" 
+        args="0 0 -0.017 0 0 0 ltpa frontwall_depth" /> 
+
+    <!-- TF for Text. Orig 0 0 1.2 0 0 0 -->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="frontwall_angle_tf" 
+        args="0 0 -0.01 0 0 0 ltpa frontwall_angle" /> 
 
     <!-- Conversion... To be commented out once robot transform established -->
 <!--     <node pkg="tf2_ros" type="static_transform_publisher" name="ltpa_world" 

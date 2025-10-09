@@ -17,67 +17,67 @@ import pandas as pd
 # Bag Parsing
 ###############################################################################
 
-# def ascans_bag2dataframe(bag):
-#     a_scans = [ [msg.count,
-#                  msg.test_number,
-#                  msg.dof,
-#                  msg.channel,
-#                  msg.amplitudes] for msg in bag ]
+def ascans_bag2dataframe(bag):
+    a_scans = [ [msg.count,
+                 msg.test_number,
+                 msg.dof,
+                 msg.channel,
+                 msg.amplitudes] for msg in bag ]
 
-#     a_scans = pd.DataFrame(a_scans, columns = ['Count',
-#                                                'Test Number',
-#                                                'Data Output Format',
-#                                                'Channel',
-#                                                'Amplitudes'])
-#     return a_scans
+    a_scans = pd.DataFrame(a_scans, columns = ['Count',
+                                               'Test Number',
+                                               'Data Output Format',
+                                               'Channel',
+                                               'Amplitudes'])
+    return a_scans
 
 
-# def observation_bag2dataframe(bag, start_time=None, end_time=None):
-#     observation = [ [t.to_sec(),
-#                      msg.header.stamp.to_sec(),
-#                      msg.header.frame_id,
-#                      msg.dof,
-#                      msg.gate_start,
-#                      msg.gate_end,
-#                      msg.ascan_length,
-#                      msg.num_ascans,
-#                      msg.digitisation_rate,
-#                      msg.n_focals,
-#                      msg.element_pitch,
-#                      msg.inter_element_spacing,
-#                      msg.vel_wedge,
-#                      msg.vel_couplant,
-#                      msg.vel_material,
-#                      msg.wedge_angle,
-#                      msg.wedge_depth,
-#                      msg.couplant_depth,
-#                      msg.specimen_depth,
-#                      ascans_bag2dataframe(msg.ascans),
-#                      # msg.ascans,
-#                      msg.max_amplitude] for (topic, msg, t) in bag.read_messages(topics=['/peak/a_scans'], start_time=start_time, end_time=end_time) ]
+def observation_bag2dataframe(bag, start_time=None, end_time=None):
+    observation = [ [t.to_sec(),
+                     msg.header.stamp.to_sec(),
+                     msg.header.frame_id,
+                     msg.dof,
+                     msg.gate_start,
+                     msg.gate_end,
+                     msg.ascan_length,
+                     msg.num_ascans,
+                     msg.digitisation_rate,
+                     msg.n_focals,
+                     msg.element_pitch,
+                     msg.inter_element_spacing,
+                     msg.vel_wedge,
+                     msg.vel_couplant,
+                     msg.vel_material,
+                     msg.wedge_angle,
+                     msg.wedge_depth,
+                     msg.couplant_depth,
+                     msg.specimen_depth,
+                     ascans_bag2dataframe(msg.ascans),
+                     # msg.ascans,
+                     msg.max_amplitude] for (topic, msg, t) in bag.read_messages(topics=['/peak/a_scans'], start_time=start_time, end_time=end_time) ]
 
-#     observation = pd.DataFrame(observation, columns = ['ROS Time Recorded (s)',
-#                                                        'ROS Time Sent (s)',
-#                                                        'Frame ID',
-#                                                        'Data Output Format',
-#                                                        'Gate Start',
-#                                                        'Gate End',
-#                                                        'A Scan Length',
-#                                                        'Number of A Scans',
-#                                                        'Digitisation Rate (Mhz)',
-#                                                        'Number of Focal Laws',
-#                                                        'Element Pitch (mm)',
-#                                                        'Inter Element Spacing (mm)',
-#                                                        'Wedge Velocity (m/s)',
-#                                                        'Couplant Velocity (m/s)',
-#                                                        'Material Velocity (m/s)',
-#                                                        'Wedge Angle (deg)',
-#                                                        'Wedge Depth (mm)',
-#                                                        'Couplant Depth (mm)',
-#                                                        'Specimen Depth (mm)',
-#                                                        'A Scans',
-#                                                        'Max Amplitude'])
-#     return observation
+    observation = pd.DataFrame(observation, columns = ['ROS Time Recorded (s)',
+                                                       'ROS Time Sent (s)',
+                                                       'Frame ID',
+                                                       'Data Output Format',
+                                                       'Gate Start',
+                                                       'Gate End',
+                                                       'A Scan Length',
+                                                       'Number of A Scans',
+                                                       'Digitisation Rate (Mhz)',
+                                                       'Number of Focal Laws',
+                                                       'Element Pitch (mm)',
+                                                       'Inter Element Spacing (mm)',
+                                                       'Wedge Velocity (m/s)',
+                                                       'Couplant Velocity (m/s)',
+                                                       'Material Velocity (m/s)',
+                                                       'Wedge Angle (deg)',
+                                                       'Wedge Depth (mm)',
+                                                       'Couplant Depth (mm)',
+                                                       'Specimen Depth (mm)',
+                                                       'A Scans',
+                                                       'Max Amplitude'])
+    return observation
 
 
 def bscan_bag2dataframe(bag, start_time=None, end_time=None):
@@ -115,7 +115,7 @@ package_path = rospkg.RosPack().get_path('peak_ros')
 path = f"{package_path}/bags/"
 # path = "/home/matthew/Desktop/phd_workspaces/kuka_kmr_driver/catkin_ws/src/peak_ros/peak_ros/bags/"
 
-file = "peak_recording_corrected_alum_2025-08-18-15-57-26.bag"
+file = "C_Axis_Stepped_180Gain_2025-12-15-13-44-26.bag"
 files = [file]
 
 # os.chdir(path)

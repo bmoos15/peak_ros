@@ -17,19 +17,25 @@ FetchContent_MakeAvailable(peak_micropulse)
 
 find_package(catkin REQUIRED COMPONENTS
   roscpp
-  nodelet
-  pluginlib
-  message_generation
-  message_runtime
+  rospy
   std_msgs
   sensor_msgs
   geometry_msgs
   visualization_msgs
-  tf2
-  tf2_msgs
   tf2_ros
-  tf2_sensor_msgs
+  tf2_msgs
+  tf2_geometry_msgs
+  rosbag
+  pcl_ros
+  pcl_conversions
+  nodelet
+  message_generation
+  dynamic_reconfigure
 )
+
+find_package(PCL REQUIRED)
+
+find_package(Boost REQUIRED COMPONENTS system filesystem)
 
 ################################################
 ## Declare ROS messages, services and actions ##
@@ -82,10 +88,9 @@ generate_messages(
 ##     and list every .cfg file to be processed
 
 ## Generate dynamic reconfigure parameters in the 'cfg' folder
-# generate_dynamic_reconfigure_options(
-#   cfg/DynReconf1.cfg
-#   cfg/DynReconf2.cfg
-# )
+generate_dynamic_reconfigure_options(
+  config/dynamic_variables.cfg
+)
 
 ###################################
 ## catkin specific configuration ##
@@ -124,9 +129,17 @@ catkin_package(
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
+  ${PCL_INCLUDE_DIRS}
+  ${Boost_INCLUDE_DIRS}
 )
 
+link_directories(
+  ${PCL_LIBRARY_DIRS}
+)
 
+add_definitions(
+  ${PCL_DEFINITIONS}
+)
 ###################
 # Nodelet Library #
 ###################
@@ -151,9 +164,27 @@ set(EXECUTABLE_NAME peak_node)
 set(EXECUTABLE_SRC src/peak_node.cpp)
 
 add_executable(${EXECUTABLE_NAME} ${EXECUTABLE_SRC})
+add_executable(ascan_postprocessor src/ascan_postprocessor.cpp)
+
+add_dependencies(ascan_postprocessor
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+)
+
+target_link_libraries(ascan_postprocessor
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${Boost_LIBRARIES}
+)
+
 #target_include_directories(${EXECUTABLE_NAME} PUBLIC ${INCLUDE_DIR})
 add_dependencies(${EXECUTABLE_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${EXECUTABLE_NAME} ${catkin_LIBRARIES} PeakMicroPulseHandler)
+target_link_libraries(${EXECUTABLE_NAME} 
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${Boost_LIBRARIES} 
+  PeakMicroPulseHandler
+)
 
 #######################
 # Reconstruction Node #
@@ -231,6 +262,10 @@ target_link_libraries(${EXECUTABLE_NAME} ${catkin_LIBRARIES})
 #   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 #   RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
 # )
+
+install(TARGETS ascan_postprocessor
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
 
 ## Mark cpp header files for installation
 # install(DIRECTORY include/${PROJECT_NAME}/
