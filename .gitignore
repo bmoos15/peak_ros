@@ -59,3 +59,11 @@ src/peak_ltpa/bags
 *.bag.active
 *.bag
 *.mkv
+*.bag.orig.active
+*.bag.orig
+*.mfmc
+*.mp4
+*.bin
+*.pcd
+*.ply
+
