@@ -37,6 +37,15 @@ find_package(PCL REQUIRED)
 
 find_package(Boost REQUIRED COMPONENTS system filesystem)
 
+# Hardcode the full path to the shared fftw3 library to bypass the static
+# libfftw3.a in /usr/local which was not compiled with -fPIC.
+set(FFTW3_INCLUDE_DIRS /usr/include)
+set(FFTW3_SHARED_LIB /usr/lib/x86_64-linux-gnu/libfftw3.so)
+if(NOT EXISTS ${FFTW3_SHARED_LIB})
+  message(FATAL_ERROR "Expected shared FFTW3 library not found at ${FFTW3_SHARED_LIB}")
+endif()
+message(STATUS "Using FFTW3: ${FFTW3_SHARED_LIB}")
+
 ################################################
 ## Declare ROS messages, services and actions ##
 ################################################
@@ -55,39 +64,18 @@ add_service_files(
   TakeSingleMeasurement.srv
 )
 
-## Generate actions in the 'action' folder
-# add_action_files(
-#   FILES
-#   Action1.action
-#   Action2.action
-# )
-
 ## Generate added messages and services with any dependencies listed here
 generate_messages(
   DEPENDENCIES
   geometry_msgs
   sensor_msgs
   std_msgs
-#   tf2_msgs
-#   tfs_sensor_msgs
-#   visualization_msgs
 )
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
 ################################################
 
-## To declare and build dynamic reconfigure parameters within this
-## package, follow these steps:
-## * In the file package.xml:
-##   * add a build_depend and a exec_depend tag for "dynamic_reconfigure"
-## * In this file (CMakeLists.txt):
-##   * add "dynamic_reconfigure" to
-##     find_package(catkin REQUIRED COMPONENTS ...)
-##   * uncomment the "generate_dynamic_reconfigure_options" section below
-##     and list every .cfg file to be processed
-
-## Generate dynamic reconfigure parameters in the 'cfg' folder
 generate_dynamic_reconfigure_options(
   config/dynamic_variables.cfg
 )
@@ -95,16 +83,9 @@ generate_dynamic_reconfigure_options(
 ###################################
 ## catkin specific configuration ##
 ###################################
-## The catkin_package macro generates cmake config files for your package
-## Declare things to be passed to dependent projects
-## INCLUDE_DIRS: uncomment this if your package contains header files
-## LIBRARIES: libraries you create in this project that dependent projects also need
-## CATKIN_DEPENDS: catkin_packages dependent projects also need
-## DEPENDS: system dependencies of this project that dependent projects also need
 
 catkin_package(
   INCLUDE_DIRS include
-#  LIBRARIES peak_ros
   CATKIN_DEPENDS
     roscpp
     nodelet
@@ -119,7 +100,6 @@ catkin_package(
     tf2_msgs
     tf2_ros
     tf2_sensor_msgs
-#  DEPENDS system_lib
 )
 
 ###########
@@ -131,6 +111,7 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
   ${PCL_INCLUDE_DIRS}
   ${Boost_INCLUDE_DIRS}
+  ${FFTW3_INCLUDE_DIRS}
 )
 
 link_directories(
@@ -140,6 +121,7 @@ link_directories(
 add_definitions(
   ${PCL_DEFINITIONS}
 )
+
 ###################
 # Nodelet Library #
 ###################
@@ -153,11 +135,12 @@ add_library(
 add_dependencies(${PROJECT_NAME}_nodelets ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME}_nodelets
   ${catkin_LIBRARIES}
+  /usr/lib/x86_64-linux-gnu/libfftw3.so
   PeakMicroPulseHandler
-  )
+)
 
 ###############
-# Peak Node #
+# Peak Node   #
 ###############
 
 set(EXECUTABLE_NAME peak_node)
@@ -177,12 +160,11 @@ target_link_libraries(ascan_postprocessor
   ${Boost_LIBRARIES}
 )
 
-#target_include_directories(${EXECUTABLE_NAME} PUBLIC ${INCLUDE_DIR})
 add_dependencies(${EXECUTABLE_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${EXECUTABLE_NAME} 
+target_link_libraries(${EXECUTABLE_NAME}
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
-  ${Boost_LIBRARIES} 
+  ${Boost_LIBRARIES}
   PeakMicroPulseHandler
 )
 
@@ -194,102 +176,13 @@ set(EXECUTABLE_NAME reconstruction_node)
 set(EXECUTABLE_SRC src/reconstruction_node.cpp)
 
 add_executable(${EXECUTABLE_NAME} ${EXECUTABLE_SRC})
-# add_executable(${EXECUTABLE_NAME} ${EXECUTABLE_SRC} ${OTHER_SRC_FILES})
 add_dependencies(${EXECUTABLE_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${EXECUTABLE_NAME} ${catkin_LIBRARIES})
-
-## Specify additional locations of header files
-## Your package locations should be listed before other locations
-# include_directories(
-# include
-#   ${catkin_INCLUDE_DIRS}
-# )
-
-## Declare a C++ library
-# add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/peak_ros.cpp
-# )
-
-## Add cmake target dependencies of the library
-## as an example, code may need to be generated before libraries
-## either from message generation or dynamic reconfigure
-# add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
-## Declare a C++ executable
-## With catkin_make all packages are built within a single CMake context
-## The recommended prefix ensures that target names across packages don't collide
-# add_executable(${PROJECT_NAME}_node src/peak_ros_node.cpp)
-
-## Rename C++ executable without prefix
-## The above recommended prefix causes long target names, the following renames the
-## target back to the shorter version for ease of user use
-## e.g. "rosrun someones_pkg node" instead of "rosrun someones_pkg someones_pkg_node"
-# set_target_properties(${PROJECT_NAME}_node PROPERTIES OUTPUT_NAME node PREFIX "")
-
-## Add cmake target dependencies of the executable
-## same as for the library above
-# add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
-## Specify libraries to link a library or executable target against
-# target_link_libraries(${PROJECT_NAME}_node
-#   ${catkin_LIBRARIES}
-# )
 
 #############
 ## Install ##
 #############
 
-# all install targets should use catkin DESTINATION variables
-# See http://ros.org/doc/api/catkin/html/adv_user_guide/variables.html
-
-## Mark executable scripts (Python etc.) for installation
-## in contrast to setup.py, you can choose the destination
-# catkin_install_python(PROGRAMS
-#   scripts/my_python_script
-#   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-# )
-
-## Mark executables for installation
-## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_executables.html
-# install(TARGETS ${PROJECT_NAME}_node
-#   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-# )
-
-## Mark libraries for installation
-## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_libraries.html
-# install(TARGETS ${PROJECT_NAME}
-#   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
-# )
-
 install(TARGETS ascan_postprocessor
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
-
-## Mark cpp header files for installation
-# install(DIRECTORY include/${PROJECT_NAME}/
-#   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-#   FILES_MATCHING PATTERN "*.h"
-#   PATTERN ".svn" EXCLUDE
-# )
-
-## Mark other files for installation (e.g. launch and bag files, etc.)
-# install(FILES
-#   # myfile1
-#   # myfile2
-#   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
-# )
-
-#############
-## Testing ##
-#############
-
-## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_peak_ros.cpp)
-# if(TARGET ${PROJECT_NAME}-test)
-#   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
-# endif()
-
-## Add folders to be run by python nosetests
-# catkin_add_nosetests(test)

@@ -1,4 +1,7 @@
+#include <fftw3.h>
 #include "peak_nodelet.h"
+#include <cmath>
+#include <algorithm>
 
 
 namespace peak_namespace {
@@ -365,6 +368,76 @@ float PeakNodelet::calculateFrontwallAngleRANSAC(const std::vector<float>& y_pos
     return angle_deg;
 }
 
+
+// ---------------------------------------------------------------------------
+// Hilbert transform via FFTW3.
+//
+// Computes the analytic signal using the standard frequency-domain method:
+//   1. Forward real-to-complex FFT
+//   2. Double positive frequencies, zero negative frequencies
+//      (DC and Nyquist are left unchanged)
+//   3. Inverse complex-to-complex FFT
+//   4. Return the real part of the resulting analytic signal, normalised by N
+// ---------------------------------------------------------------------------
+std::vector<float> PeakNodelet::computeHilbertReal(const std::vector<int>& signal)
+{
+    int n = static_cast<int>(signal.size());
+    if (n == 0) return {};
+
+    // --- Forward FFT: real -> complex (r2c produces n/2+1 bins) ---
+    double*       in       = fftw_alloc_real(n);
+    fftw_complex* freq     = fftw_alloc_complex(n / 2 + 1);
+    fftw_complex* full     = fftw_alloc_complex(n);
+    fftw_complex* analytic = fftw_alloc_complex(n);
+
+    for (int k = 0; k < n; ++k)
+        in[k] = static_cast<double>(signal[k]);
+
+    fftw_plan plan_fwd = fftw_plan_dft_r2c_1d(n, in, freq, FFTW_ESTIMATE);
+    fftw_execute(plan_fwd);
+    fftw_destroy_plan(plan_fwd);
+    fftw_free(in);
+
+    // --- Expand r2c bins to full spectrum and apply Hilbert weighting ---
+    int half = n / 2;
+
+    full[0][0] = freq[0][0];   // DC — unchanged
+    full[0][1] = freq[0][1];
+
+    for (int k = 1; k < half; ++k) {   // positive frequencies — double
+        full[k][0] = 2.0 * freq[k][0];
+        full[k][1] = 2.0 * freq[k][1];
+    }
+
+    if (n % 2 == 0) {                  // Nyquist (even n only) — unchanged
+        full[half][0] = freq[half][0];
+        full[half][1] = freq[half][1];
+    }
+
+    for (int k = half + 1; k < n; ++k) {  // negative frequencies — zero
+        full[k][0] = 0.0;
+        full[k][1] = 0.0;
+    }
+
+    fftw_free(freq);
+
+    // --- Inverse FFT: complex -> analytic signal ---
+    fftw_plan plan_inv = fftw_plan_dft_1d(n, full, analytic, FFTW_BACKWARD, FFTW_ESTIMATE);
+    fftw_execute(plan_inv);
+    fftw_destroy_plan(plan_inv);
+    fftw_free(full);
+
+    // --- Extract real part, normalise by N ---
+    std::vector<float> result(n);
+    const double inv_n = 1.0 / static_cast<double>(n);
+    for (int k = 0; k < n; ++k)
+        result[k] = static_cast<float>(analytic[k][0] * inv_n);
+
+    fftw_free(analytic);
+    return result;
+}
+
+
 bool PeakNodelet::streamDataSrvCb(peak_ros::StreamData::Request& request,
                                   peak_ros::StreamData::Response& response) {
     NODELET_INFO_STREAM(node_name_ << ": Streaming request received: " << request.stream_data);
@@ -556,9 +629,6 @@ void PeakNodelet::populateBScanMessage(const peak_ros::Observation& obs_msg) {
     sensor_msgs::PointCloud2Iterator<float> gate_bottom_iterTof(gate_bottom_cloud_, "TimeofFlight");
 
     float dt =                  1.0f / ((float)obs_msg.digitisation_rate * 1000000.0f);        // sec
-    // double time_in_wedge =       2.0 * obs_msg.wedge_depth / obs_msg.vel_wedge / 1000.0;       // sec
-    // double time_in_couplant =    2.0 * obs_msg.couplant_depth / obs_msg.vel_couplant / 1000.0; // sec
-    // double time_in_specimen =    2.0 * obs_msg.specimen_depth / obs_msg.vel_material / 1000.0; // sec
 
     float nan_value = std::numeric_limits<float>::quiet_NaN();
 
@@ -576,6 +646,13 @@ void PeakNodelet::populateBScanMessage(const peak_ros::Observation& obs_msg) {
     std::vector<float> current_frame_positions;
 
     for (const auto& ascan : obs_msg.ascans) {
+
+        // --- Hilbert transform: compute real part of analytic signal for this A-scan ---
+        // The real part is identical to the original signal (up to normalisation), so
+        // normalised_amplitude is computed the same way as before but sourced from the
+        // Hilbert-domain real values rather than the raw integer samples.
+        std::vector<float> hilbert_real = computeHilbertReal(ascan.amplitudes);
+
         bool    found_front_wall = false;
         bool    immersion_       = true;
         float   amp_front_wall   = nan_value;
@@ -603,25 +680,24 @@ void PeakNodelet::populateBScanMessage(const peak_ros::Observation& obs_msg) {
             
             tof = z;
 
-            if (use_tcg_ and z > (10.0f * 0.001f)) { // TODO: Param for skipping x mm in before applying tcg
-                float amplitude_tcg;
+            // Use the Hilbert real value for this sample; apply TCG in the same domain
+            float hilbert_sample = hilbert_real[i];
 
-                // Amplify by n dB per l mm
-                // amplitude_tcg = amplitude * 10.0 ^ (n * (z / l) / 20.0);
-                amplitude_tcg = (float)amplitude * std::pow(10.0f, (amp_factor_ * (z / depth_factor_) / 20.0f));
+            if (use_tcg_ and z > (10.0f * 0.001f)) {
+                float amplitude_tcg = hilbert_sample * std::pow(10.0f, (amp_factor_ * (z / depth_factor_) / 20.0f));
 
-
-                if (amplitude_tcg > (float)obs_msg.max_amplitude * tcg_limit_) {
-                    amplitude_tcg = (float)obs_msg.max_amplitude * tcg_limit_;
-                } else if (amplitude_tcg < -(float)obs_msg.max_amplitude * tcg_limit_) {
-                    amplitude_tcg = -(float)obs_msg.max_amplitude * tcg_limit_;
+                float limit = (float)obs_msg.max_amplitude * tcg_limit_;
+                if (amplitude_tcg > limit) {
+                    amplitude_tcg = limit;
+                } else if (amplitude_tcg < -limit) {
+                    amplitude_tcg = -limit;
                 }
 
-                amplitude = amplitude_tcg;
+                hilbert_sample = amplitude_tcg;
             }
 
-            // Normalised on Linear Scale
-            normalised_amplitude = (float)amplitude / (float)obs_msg.max_amplitude;
+            // Normalised on linear scale using Hilbert real part
+            normalised_amplitude = hilbert_sample / (float)obs_msg.max_amplitude;
 
             *bscan_iterX = x;
             *bscan_iterY = y;
@@ -745,20 +821,6 @@ void PeakNodelet::populateBScanMessage(const peak_ros::Observation& obs_msg) {
             sum_depth += depth;
         }
         float avg_depth = sum_depth / current_frame_depths.size();
-        
-        // // Add current frame data to rolling buffer
-        // depth_front_wall_values_.insert(depth_front_wall_values_.end(), 
-        //                                 current_frame_depths.begin(), 
-        //                                 current_frame_depths.end());
-        // element_positions_.insert(element_positions_.end(),
-        //                          current_frame_positions.begin(),
-        //                          current_frame_positions.end());
-        
-        // // Keep only the last N samples for moving average
-        // while (depth_front_wall_values_.size() > max_depth_samples_) {
-        //     depth_front_wall_values_.erase(depth_front_wall_values_.begin());
-        //     element_positions_.erase(element_positions_.begin());
-        // }
         
         // Calculate angle using RANSAC if we have enough points
         if (current_frame_depths.size() >= 10) {  // Minimum 10 points for RANSAC
