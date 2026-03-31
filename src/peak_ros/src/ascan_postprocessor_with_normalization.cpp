@@ -69,30 +69,22 @@ public:
         ros::NodeHandle nh;
         ros::NodeHandle private_nh("~");
 
-        // Load parameters — bag paths from private namespace (set in launch file)
+        // Load parameters
         private_nh.param<std::string>("input_bag", input_bag_path_, "");
         private_nh.param<std::string>("output_bag", output_bag_path_, "output.bag");
-
-        // TCG settings — loaded from /beccas/tcg/* (rosparam loads beccas.yaml there)
-        nh.param<bool>  ("/beccas/tcg/use_tcg",      use_tcg_,      true);
-        nh.param<float> ("/beccas/tcg/amp_factor",   amp_factor_,   0.0f);
-        nh.param<float> ("/beccas/tcg/depth_factor", depth_factor_, 10.0f); // mm, converted below
-        nh.param<float> ("/beccas/tcg/tcg_limit",    tcg_limit_,    1.0f);
-
-        // Gate settings — loaded from /beccas/gates/*
-        nh.param<float> ("/beccas/gates/gate_front_wall",    gate_front_wall_,    0.5f);
-        nh.param<float> ("/beccas/gates/depth_to_skip",      depth_to_skip_,      35.0f); // mm, converted below
-        nh.param<float> ("/beccas/gates/gate_back_wall",     gate_back_wall_,     0.5f);
-        nh.param<float> ("/beccas/gates/max_depth",          max_depth_,          30.0f); // mm, converted below
-        nh.param<bool>  ("/beccas/gates/zero_to_front_wall", zero_to_front_wall_, true);
-        nh.param<bool>  ("/beccas/gates/show_front_wall",    show_front_wall_,    true);
-
-        // Boundary conditions — loaded from /beccas/boundary_conditions/*
-        nh.param<bool>("/beccas/boundary_conditions/immersion", immersion_, true);
-
-        // RANSAC — still set directly in launch file, so stays in private namespace
-        private_nh.param<int>  ("ransac_iterations", ransac_iterations_, 100);
-        private_nh.param<float>("ransac_threshold",  ransac_threshold_,  0.001f);
+        private_nh.param<bool>("use_tcg", use_tcg_, true);
+        private_nh.param<float>("amp_factor", amp_factor_, 0.0);
+        private_nh.param<float>("depth_factor", depth_factor_, 10.0); // in mm, will be converted
+        private_nh.param<float>("tcg_limit", tcg_limit_, 1.0);
+        private_nh.param<float>("gate_front_wall", gate_front_wall_, 0.5);
+        private_nh.param<float>("depth_to_skip", depth_to_skip_, 35.0); // in mm, will be converted
+        private_nh.param<float>("gate_back_wall", gate_back_wall_, 0.5);
+        private_nh.param<float>("max_depth", max_depth_, 30.0); // in mm, will be converted
+        private_nh.param<bool>("zero_to_front_wall", zero_to_front_wall_, true);
+        private_nh.param<bool>("show_front_wall", show_front_wall_, true);
+        private_nh.param<bool>("immersion", immersion_, true);
+        private_nh.param<int>("ransac_iterations", ransac_iterations_, 100);
+        private_nh.param<float>("ransac_threshold", ransac_threshold_, 0.001);
 
         // Convert mm to m
         depth_factor_ *= 0.001f;
@@ -729,8 +721,15 @@ private:
         float nan_value = std::numeric_limits<float>::quiet_NaN();
         int element_i = 0;
 
-        // FIRST PASS: Find maximum amplitude within the depth window (depth_to_skip to depth_to_skip + max_depth)
+        // ADC full-scale range: fixed reference so that GANS (hardware gain) affects normalised amplitudes.
+        // DOF 1 = 8-bit (range ±128), DOF 4 = 16-bit (range ±32768).
+        float adc_range = (obs_msg.dof == 4) ? 32768.0f : 128.0f;
+
+        // FIRST PASS: Find maximum amplitude within the gate region [depth_to_skip, max_depth - 10mm]
+        // The upper bound is set 10mm below max_depth so that the 6dB drop method (threshold 0.505)
+        // centres on the defect area rather than being biased by the far end of the gate.
         float window_max_amplitude = 0.0f;
+        const float gate_norm_offset = 0.010f; // 10 mm in metres
         
         for (const auto& ascan : obs_msg.ascans) {
             int t = 0;
@@ -750,8 +749,8 @@ private:
                     z = z + (float)((float)t * 1500.0f * dt / 2.0f) - (float)((float)t * (float)obs_msg.vel_material * dt / 2.0f);
                 }
                 
-                // Detect front wall to know when to switch velocity (for depth calculation accuracy)
-                float temp_normalized = (float)amplitude / (float)obs_msg.max_amplitude;
+                // Detect front wall using ADC-range normalization so GANS affects the threshold
+                float temp_normalized = (float)amplitude / adc_range;
                 if (!found_front_wall_temp && temp_normalized > gate_front_wall_) {
                     found_front_wall_temp = true;
                     depth_front_wall_temp = z;
@@ -761,10 +760,10 @@ private:
                     }
                 }
                 
-                // Check if this sample is within the depth window
+                // Check if this sample is within the gate region [depth_to_skip, max_depth - 10mm]
                 if (found_front_wall_temp) {
                     float z_relative = z - depth_front_wall_temp;
-                    if (z_relative >= depth_to_skip_ && z_relative <= (depth_to_skip_ + max_depth_)) {
+                    if (z_relative > depth_to_skip_ && z_relative < (max_depth_ - gate_norm_offset)) {
                         float abs_amplitude = std::abs((float)amplitude);
                         if (abs_amplitude > window_max_amplitude) {
                             window_max_amplitude = abs_amplitude;
@@ -779,7 +778,7 @@ private:
         // Use window max if found, otherwise fall back to observation max
         float normalization_factor = (window_max_amplitude > 0.0f) ? window_max_amplitude : (float)obs_msg.max_amplitude;
         
-        ROS_INFO_THROTTLE(1.0, "Window max amplitude: %.2f, Observation max: %d, Using: %.2f", 
+        ROS_INFO_THROTTLE(1.0, "Gate max amplitude: %.2f, Observation max: %d, Using: %.2f",
                           window_max_amplitude, obs_msg.max_amplitude, normalization_factor);
 
         // SECOND PASS: Process A-scans with window-based normalization
@@ -832,7 +831,7 @@ private:
                 float normalised_amplitude;
                 if (use_tcg_ && z > 0.0f) {
                     float amplitude_tcg = (float)amplitude * std::pow(10.0f, (amp_factor_ * (z / depth_factor_) / 20.0f));
-                    
+
                     if (amplitude_tcg > normalization_factor * tcg_limit_) {
                         amplitude_tcg = normalization_factor * tcg_limit_;
                     } else if (amplitude_tcg < -normalization_factor * tcg_limit_) {
@@ -842,13 +841,15 @@ private:
                 } else {
                     normalised_amplitude = (float)amplitude / normalization_factor;
                 }
+                // ADC-range normalisation used for front wall detection threshold so GANS has effect
+                float hw_normalised_amplitude = normalised_amplitude * normalization_factor / adc_range;
 
                 // Populate B-scan (all data)
                 // Publish directly in ltpa frame - no transformation needed
                 *bscan_iterX = x;
                 *bscan_iterY = y;
                 *bscan_iterZ = z;
-                *bscan_iterAmps = normalised_amplitude;
+                *bscan_iterAmps = (float)amplitude / (float)obs_msg.max_amplitude;
 
                 ++bscan_iterX;
                 ++bscan_iterY;
@@ -862,8 +863,8 @@ private:
                 float gated_amplitude = nan_value;
                 float gated_tof = nan_value;
 
-                // Front wall gate
-                if (!found_front_wall && normalised_amplitude > gate_front_wall_) {
+                // Front wall gate — threshold against hardware-max normalisation
+                if (!found_front_wall && hw_normalised_amplitude > gate_front_wall_) {
                     depth_front_wall = z;
 
                     if (zero_to_front_wall_) {

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 elements = 128
-aperture = 2
+aperture = 20
 
 
 # Creates a 0 Deg no wedge or couplant mps script

@@ -163,15 +163,14 @@ def main():
     dB = 3
     
     # List of all defects to process
-    defects = ['defect6_adjusted_max']
-    # defects = ['Defect_1', 'Defect_2', 'Defect_3', 'Defect_4', 'Defect_5', 
-    #            'Defect_6', 'Defect_7', 'Defect_8', 'Defect_9', 'Defect_10',
-    #            'defect_4', 'defect_5', 'defect_6', 'defect_7', 'defect_8']
+    # defects = ['Defect_1_1_5TVG', 'Defect_10_1_5TVG']
+    defects = ['Defect_1__8TVG', 'Defect_2__8TVG', 'Defect_3__8TVG', 'Defect_4__8TVG', 'Defect_5__8TVG', 
+               'Defect_6__8TVG', 'Defect_7__8TVG', 'Defect_8__8TVG', 'Defect_9__8TVG', 'Defect_10__8TVG']
     
-    base_path = '/home/rebecca/ut_servoing/src/peak_ros/src/peak_ros/bags/processed_data_220Gain/Defects_2/'
+    base_path = '/home/rebecca/ut_servoing/src/peak_ros/src/peak_ros/bags/New_angle/Corr/'
     
     # Open consolidated summary file
-    consolidated_summary_file = f'{base_path}all_defects_analysis_summary_maxcenter.txt'
+    consolidated_summary_file = f'{base_path}{dB}dB_analysis_summary.txt'
     
     with open(consolidated_summary_file, 'w') as summary_f:
         summary_f.write("="*70 + "\n")
@@ -199,7 +198,7 @@ def main():
                 filtered_points, center, diameter, max_amplitude_center, threshold_amplitude = process_point_cloud(points, dB)
                 
                 # Save individual filtered point cloud
-                output_file = f'{base_path}{defect}_{dB}dB_filtered_point_cloud_maxcenter.txt'
+                output_file = f'{base_path}{defect}{dB}dB_filtered_point_cloud_maxcenter.txt'
                 np.savetxt(output_file, filtered_points, 
                            header='x y z amplitude', 
                            fmt='%.6f',
@@ -373,7 +372,7 @@ Plane Fit:
     plt.tight_layout()
     
     # Save the figure
-    output_path = f'/home/rebecca/ut_servoing/src/peak_ros/src/peak_ros/bags/processed_data_220Gain/Defects_2/{defect}_{dB}dB_analysis_visualization_maxcenter.png'
+    output_path = f'/home/rebecca/ut_servoing/src/peak_ros/src/peak_ros/bags/New_angle/Corr/{defect}_{dB}dB_summary.png'
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
     print(f"Visualization saved to: {output_path}")
     plt.close()

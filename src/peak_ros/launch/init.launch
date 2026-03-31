@@ -7,17 +7,19 @@
 
     <!-- <arg name="mps_file" default="composite_roller_probe/roller_probe_wing_cover_100_MHz.mps" /> -->
     <!-- <arg name="mps_file" default="Immersion_5MHz_NoFocus.mps" /> -->
-    <arg name="mps_file" default="immersion_128el_2aperture.mps" />
+    <!-- <arg name="mps_file" default="immersion_128el_2aperture_20mmdeep.mps" />     -->
     <!-- <arg name="mps_file" default="immersion_128el_2aperture.mps" /> -->
+    <!-- <arg name="mps_file" default="immersion_128el_8aperture.mps" /> -->
+    <arg name="mps_file" default="immersion_128el_16aperture.mps" />
     <!-- <arg name="mps_file" default="immersion_64el_2aperture.mps" /> -->
     <!-- <arg name="mps_file" default="Immersion_64el_1aperture.mps" /> -->
     <!-- <arg name="mps_file" default="immersion_64el.mps" /> -->
     <!-- <arg name="mps_file" default="immersion_64el_16aperture.mps" /> -->
     <!-- <arg name="mps_file" default="Immersion_64el_24aperture.mps" /> -->
 
-    <arg name="export_pcd" default="false" />
-    <arg name="logging" default="true" />
-    <arg name="rosbag_name" default="C_Axis_Stepped_250Gain" />
+    <arg name="export_pcd" default="true" />
+    <arg name="logging" default="false" />
+    <arg name="rosbag_name" default="New_angle_173Gain4TVG_Corr" />
 
     <arg name="rviz" default="true" />
 
@@ -81,11 +83,11 @@
 
 
         <!-- PCD Exporter -->
-        <node pkg="pcl_ros" type="pointcloud_to_pcd" name="peak_pointcloud_to_pcd" args="input:=/peak/detections _prefix:=$(find peak_ros)/bags/DEC/C_Axis_Corrected_35hresh_195Gain" if="$(arg export_pcd)" />
+        <node pkg="pcl_ros" type="pointcloud_to_pcd" name="peak_pointcloud_to_pcd" args="input:=/peak/detections _prefix:=$(find peak_ros)/bags/New_angle_173Gain4TVG_corr" if="$(arg export_pcd)" />
 
 
         <!-- Logging -->
-        <node pkg="rosbag" type="record" name="rosbag_peak" args="record --repeat-latched -b 1024 -o $(find peak_ros)/bags/$(arg rosbag_name) /tf /peak/a_scans /peak/frontwall_angle /peak/frontwall_depth" if="$(arg logging)" />
+        <node pkg="rosbag" type="record" name="rosbag_peak" args="record --repeat-latched -b 1024 -o $(find peak_ros)/bags/$(arg rosbag_name) /tf /peak/a_scans /peak/b_scan /peak/detections /peak/frontwall_angle /peak/frontwall_depth" if="$(arg logging)" />
         
     </group>
 
