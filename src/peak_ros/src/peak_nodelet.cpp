@@ -430,8 +430,13 @@ std::vector<float> PeakNodelet::computeHilbertReal(const std::vector<int>& signa
     // --- Extract real part, normalise by N ---
     std::vector<float> result(n);
     const double inv_n = 1.0 / static_cast<double>(n);
-    for (int k = 0; k < n; ++k)
-        result[k] = static_cast<float>(analytic[k][0] * inv_n);
+    // for (int k = 0; k < n; ++k)
+    //     result[k] = static_cast<float>(analytic[k][0] * inv_n);
+    for (int k = 0; k < n; ++k) {
+        double re = analytic[k][0] * inv_n;
+        double im = analytic[k][1] * inv_n;
+        result[k] = static_cast<float>(std::sqrt(re * re + im * im)); // <-- magnitude
+    }
 
     fftw_free(analytic);
     return result;
@@ -697,7 +702,8 @@ void PeakNodelet::populateBScanMessage(const peak_ros::Observation& obs_msg) {
             }
 
             // Normalised on linear scale using Hilbert real part
-            normalised_amplitude = hilbert_sample / (float)obs_msg.max_amplitude;
+            normalised_amplitude = std::abs(hilbert_sample);
+            //normalised_amplitude = hilbert_sample / (float)obs_msg.max_amplitude;
 
             *bscan_iterX = x;
             *bscan_iterY = y;
@@ -738,18 +744,50 @@ void PeakNodelet::populateBScanMessage(const peak_ros::Observation& obs_msg) {
 
 
             // Back wall gate
-            } else if (found_front_wall and 
+            } else if (found_front_wall and !found_back_wall and
                        z < max_depth_ + depth_front_wall + depth_to_skip_ and
                        z > (depth_to_skip_ + depth_front_wall) and 
                        normalised_amplitude > gate_back_wall_) {
-                
-                depth_back_wall = z;
+
+
+                // In the back wall gate branch, 'i' is the current sample index where threshold was crossed
+                int search_samples = static_cast<int>(0.0015f * 2.0f / (obs_msg.vel_material * dt)); // +1mm window
+                int idx_start = std::max(0, i);
+                int idx_end   = std::min(static_cast<int>(ascan.amplitudes.size()), i + search_samples);
+
+                // Walk left: find last index where amplitude drops below threshold
+                // auto left_it = std::find_if(
+                //     std::make_reverse_iterator(hilbert_real.begin() + i),
+                //     hilbert_real.rend(),
+                //     [&](float val){ return std::abs(val) < gate_back_wall_; }
+                // );
+                // int idx_start = (left_it == hilbert_real.rend()) 
+                //     ? 0 
+                //     : static_cast<int>(std::distance(hilbert_real.begin(), left_it.base()));
+
+                // // Walk right: find first index where amplitude drops below threshold
+                // auto right_it = std::find_if(
+                //     hilbert_real.begin() + i,
+                //     hilbert_real.end(),
+                //     [&](float val){ return std::abs(val) < gate_back_wall_; }
+                // );
+                // int idx_end = (right_it == hilbert_real.end()) 
+                //     ? static_cast<int>(hilbert_real.size()) 
+                //     : static_cast<int>(std::distance(hilbert_real.begin(), right_it));
+
+                auto peak_it = std::max_element(hilbert_real.begin() + idx_start,
+                                                hilbert_real.begin() + idx_end,
+                                                [](float a, float b){ return std::abs(a) < std::abs(b); });
+
+                float peak_amplitude = std::abs(*peak_it);
+                float peak_amp_depth = static_cast<int>(std::distance(hilbert_real.begin(), peak_it)) * obs_msg.vel_material * dt / 2.0f;
                 
                 if (zero_to_front_wall_) {
-                    z = z - depth_front_wall;
+                    peak_amp_depth = peak_amp_depth - depth_front_wall;
                 }
                 
-                amp_back_wall = normalised_amplitude;
+                depth_back_wall = peak_amp_depth;
+                amp_back_wall = peak_amplitude;
                 gated_amplitude = amp_back_wall;
                 tof = depth_back_wall;
 
@@ -823,7 +861,7 @@ void PeakNodelet::populateBScanMessage(const peak_ros::Observation& obs_msg) {
         float avg_depth = sum_depth / current_frame_depths.size();
         
         // Calculate angle using RANSAC if we have enough points
-        if (current_frame_depths.size() >= 10) {  // Minimum 10 points for RANSAC
+        if (current_frame_depths.size() >= 20) {  // Minimum 10 points for RANSAC
             frontwall_angle_ = calculateFrontwallAngleRANSAC(current_frame_positions, 
                                                              current_frame_depths);
             

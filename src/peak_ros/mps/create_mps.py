@@ -2,6 +2,10 @@
 
 elements = 128
 aperture = 20
+focal_depth_1 = 0.030 #m
+vel_material_1 = 1500 #m/s
+focal_depth_aluminium = 0.030 #m
+vel_material_2 = 6420 #m/s
 
 
 # Creates a 0 Deg no wedge or couplant mps script

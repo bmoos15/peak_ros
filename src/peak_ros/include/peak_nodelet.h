@@ -141,7 +141,7 @@ private:
     // -------------------------------------------------------------------
     std::vector<float>                 depth_front_wall_values_;
     std::vector<float>                 element_positions_;
-    const size_t                       max_depth_samples_ = 100;
+    const size_t                       max_depth_samples_ = 50;
 
     float                              frontwall_angle_ = 0.0f;
 

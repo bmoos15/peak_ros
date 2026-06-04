@@ -21,16 +21,16 @@ Z_MIN             = 0.0001   # minimum Z depth to keep
 Z_MAX             = 0.05   # maximum Z depth to keep
 CIRCLE_DIAMETER   = 0.010    # expected circle diameter in metres (10 mm)
 SIZE_TOLERANCE    = 0.5      # accept clusters within this fraction of diameter (0.5 = +/-50%)
-EXPECTED_CLUSTERS = 10       # how many circles to find
-MIN_SAMPLES       = 10       # minimum points per cluster
+EXPECTED_CLUSTERS = 15       # how many circles to find
+MIN_SAMPLES       = 3       # minimum points per cluster
 VOXEL_SIZE        = 0.001    # downsampling voxel size (keep small relative to circle)
-GAIN              = 173      # used in output filename
-TVG               = 4        # used in output filename
-OUTPUT_DIR        = "/home/rebecca/ut_servoing/src/peak_ros/src/peak_ros/bags/New_angle/Corr/Gate_5/"
+GAIN              = 100      # used in output filename
+TVG               = 11       # used in output filename
+OUTPUT_DIR        = f"/home/rebecca/ut_servoing/src/peak_ros/src/peak_ros/bags/Spoiler/Flat_Gain{GAIN}_{TVG}TVG/"
 
 # Derived from CIRCLE_DIAMETER -- do not edit these directly
-EPS      = CIRCLE_DIAMETER * 0.19
-SIZE_MIN = 0.005
+EPS      = CIRCLE_DIAMETER * 0.2
+SIZE_MIN = 0.0002
 SIZE_MAX = 0.025
 
 # ======================================================
@@ -330,8 +330,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Recompute derived values if overridden on CLI
-    eps      = args.circle_diameter * 0.19
-    size_min = 0.005
+    eps      = args.circle_diameter * 0.2
+    size_min = 0.0002
     size_max = 0.025
 
     extract_circles(
