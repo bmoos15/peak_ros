@@ -10,9 +10,13 @@ PeakNodelet::PeakNodelet()
   : rate_(10),
     ns_("/peak"), // TODO: Figure out how to get this when using nodelets so it isn't hardcoded
     peak_handler_(),
-    stream_(false),
     frontwall_angle_(0.0f)
 {
+}
+
+
+PeakNodelet::~PeakNodelet() {
+    peak_handler_.stopAsyncAcquisition();
 }
 
 
@@ -32,10 +36,6 @@ void PeakNodelet::onInit()
                         package_path_ + "/mps/" + PeakNodelet::paramHandler(ns_ + "/settings/mps_file", mps_file_)
                         );
 
-   // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-   // TODO: Move to using smart pointers, mutex, futures or semiphors
-   // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ltpa_data_ptr_ = peak_handler_.ltpa_data_ptr();
     rate_ = ros::Rate(acquisition_rate_);
 
     PeakNodelet::paramHandler(ns_ + "/settings/digitisation_rate", digitisation_rate_);
@@ -71,11 +71,11 @@ void PeakNodelet::onInit()
     prePopulateGateTopMessage();
     prePopulateGateBottomMessage();
 
-    ascan_publisher_ =        nh_.advertise<peak_ros::Observation>(ns_ + "/a_scans", 100, true);
-    bscan_publisher_ =        nh_.advertise<sensor_msgs::PointCloud2>(ns_ + "/b_scan", 100, true);
-    gated_bscan_publisher_ =  nh_.advertise<sensor_msgs::PointCloud2>(ns_ + "/gated_b_scan", 100, true);
-    gate_top_publisher_ =     nh_.advertise<sensor_msgs::PointCloud2>(ns_ + "/gate_top", 100, true);
-    gate_bottom_publisher_ =  nh_.advertise<sensor_msgs::PointCloud2>(ns_ + "/gate_bottom", 100, true);
+    ascan_publisher_ =        nh_.advertise<peak_ros::Observation>(ns_ + "/a_scans", 3, false);
+    bscan_publisher_ =        nh_.advertise<sensor_msgs::PointCloud2>(ns_ + "/b_scan", 3, false);
+    gated_bscan_publisher_ =  nh_.advertise<sensor_msgs::PointCloud2>(ns_ + "/gated_b_scan", 3, false);
+    gate_top_publisher_ =     nh_.advertise<sensor_msgs::PointCloud2>(ns_ + "/gate_top", 3, false);
+    gate_bottom_publisher_ =  nh_.advertise<sensor_msgs::PointCloud2>(ns_ + "/gate_bottom", 3, false);
     depth_marker_publisher_ = nh_.advertise<visualization_msgs::Marker>(ns_ + "/depth_text_marker", 10, true);
     angle_marker_publisher_ = nh_.advertise<visualization_msgs::Marker>(ns_ + "/angle_text_marker", 10, true);
     frontwall_depth_publisher_ = nh_.advertise<std_msgs::Float32>(ns_ + "/frontwall_depth", 10, true);    
@@ -121,7 +121,11 @@ void PeakNodelet::initHardware() {
     NODELET_INFO_STREAM(node_name_ << ": Initialising Peak hardware...");
 
     peak_handler_.connect();
-    peak_handler_.sendReset(digitisation_rate_);
+
+    int reset_sleep = 10;
+    nh_.param(ns_ + "/settings/reset_sleep_seconds", reset_sleep, 10);
+    peak_handler_.sendReset(digitisation_rate_, reset_sleep);
+
     peak_handler_.readMpsFile();
     peak_handler_.sendMpsConfiguration();
 
@@ -140,7 +144,7 @@ void PeakNodelet::prePopulateAScanMessage() {
     ltpa_msg_.num_ascans = peak_handler_.num_a_scans_;
     ltpa_msg_.ascans.reserve(ltpa_msg_.num_ascans);
 
-    ltpa_msg_.digitisation_rate = ltpa_data_ptr_->digitisation_rate;
+    ltpa_msg_.digitisation_rate = peak_handler_.ltpa_data_ptr()->digitisation_rate;
 
     // TODO: Consider sending this as a separate one time latched message rather than repeated here
     PeakNodelet::paramHandler(ns_ + "/settings/boundary_conditions/n_focals", ltpa_msg_.n_focals);
@@ -448,10 +452,14 @@ bool PeakNodelet::streamDataSrvCb(peak_ros::StreamData::Request& request,
     NODELET_INFO_STREAM(node_name_ << ": Streaming request received: " << request.stream_data);
     if (request.stream_data) {
         stream_ = true;
+        peak_handler_.startAsyncAcquisition(
+            [this](bool valid) { onDataReady(valid); },
+            acquisition_rate_);
         response.success = true;
         return true;
     } else {
         stream_ = false;
+        peak_handler_.stopAsyncAcquisition();
         response.success = true;
         return true;
     }
@@ -473,85 +481,18 @@ bool PeakNodelet::takeMeasurementSrvCb(peak_ros::TakeSingleMeasurement::Request&
 
 
 void PeakNodelet::takeMeasurement() {
-    // TODO: Remove profiling when happy with acquisition rates
+    std::lock_guard<std::mutex> lock(processing_mutex_);
+
     std::chrono::high_resolution_clock::time_point begin;
     std::chrono::high_resolution_clock::time_point end;
-    std::chrono::high_resolution_clock::time_point end_1;
-    std::chrono::high_resolution_clock::time_point end_2;
-    std::chrono::high_resolution_clock::time_point end_3;
-    std::chrono::high_resolution_clock::time_point end_4;
-    std::chrono::high_resolution_clock::time_point end_5;
-
     if (profile_) begin = std::chrono::high_resolution_clock::now();
 
-    // ~40ms
     if (peak_handler_.sendDataRequest()) {
-
-        if (profile_) {
-            end_1 = std::chrono::high_resolution_clock::now();
-            std::cout << "\033[32m";
-            std::cout << "Profiling [peak_handler_.sendDataRequest()] --- " << std::chrono::duration_cast<std::chrono::microseconds>(end_1-begin).count() << " us" << std::endl;
-            std::cout << "\033[0m";
+        const auto* data_ptr = peak_handler_.ltpa_data_ptr();
+        if (data_ptr) {
+            latest_data_ = *data_ptr;
         }
-
-        // ~0.3ms
-        populateAScanMessage();
-
-        if (profile_) {
-            end_2 = std::chrono::high_resolution_clock::now();
-            std::cout << "\033[32m";
-            std::cout << "Profiling [PeakNodelet::populateAScanMessage()] --- " << std::chrono::duration_cast<std::chrono::microseconds>(end_2-end_1).count() << " us" << std::endl;
-            std::cout << "\033[0m";
-        }
-
-        // ~0.4ms
-        ascan_publisher_.publish(ltpa_msg_);
-
-        if (profile_) {
-            end_3 = std::chrono::high_resolution_clock::now();
-            std::cout << "\033[32m";
-            std::cout << "Profiling [ascan_publisher_.publish(ltpa_msg_)] --- " << std::chrono::duration_cast<std::chrono::microseconds>(end_3-end_2).count() << " us" << std::endl;
-            std::cout << "\033[0m";
-        }
-
-        // ~12ms
-        populateBScanMessage(ltpa_msg_);
-
-        if (profile_) {
-            end_4 = std::chrono::high_resolution_clock::now();
-            std::cout << "\033[32m";
-            std::cout << "Profiling [PeakNodelet::populateBScanMessage(ltpa_msg_)] --- " << std::chrono::duration_cast<std::chrono::microseconds>(end_4-end_3).count() << " us" << std::endl;
-            std::cout << "\033[0m";
-        }
-        
-        bscan_publisher_.publish(bscan_cloud_);
-
-        if (profile_) {
-            end_5 = std::chrono::high_resolution_clock::now();
-            std::cout << "\033[32m";
-            std::cout << "Profiling [bscan_publisher_.publish(bscan_cloud_);] --- " << std::chrono::duration_cast<std::chrono::microseconds>(end_5-end_4).count() << " us" << std::endl;
-            std::cout << "\033[0m";
-        }
-
-        gated_bscan_publisher_.publish(gated_bscan_cloud_);        
-
-        if (profile_) {
-            end_5 = std::chrono::high_resolution_clock::now();
-            std::cout << "\033[32m";
-            std::cout << "Profiling [gate_top_publisher_.publish(bscan_cloud_);] --- " << std::chrono::duration_cast<std::chrono::microseconds>(end_5-end_4).count() << " us" << std::endl;
-            std::cout << "\033[0m";
-        }
-
-        gate_top_publisher_.publish(gate_top_cloud_);        
-
-        if (profile_) {
-            end_5 = std::chrono::high_resolution_clock::now();
-            std::cout << "\033[32m";
-            std::cout << "Profiling [gate_bottom_publisher_.publish(bscan_cloud_);] --- " << std::chrono::duration_cast<std::chrono::microseconds>(end_5-end_4).count() << " us" << std::endl;
-            std::cout << "\033[0m";
-        }
-
-        gate_bottom_publisher_.publish(gate_bottom_cloud_);
+        processMeasurement();
     }
 
     if (profile_) {
@@ -563,21 +504,80 @@ void PeakNodelet::takeMeasurement() {
 }
 
 
+void PeakNodelet::processMeasurement() {
+    std::chrono::high_resolution_clock::time_point begin;
+    std::chrono::high_resolution_clock::time_point end_1;
+    std::chrono::high_resolution_clock::time_point end_2;
+    std::chrono::high_resolution_clock::time_point end_3;
+    std::chrono::high_resolution_clock::time_point end_4;
+    std::chrono::high_resolution_clock::time_point end_5;
+
+    if (profile_) begin = std::chrono::high_resolution_clock::now();
+
+    populateAScanMessage();
+
+    if (profile_) {
+        end_1 = std::chrono::high_resolution_clock::now();
+        std::cout << "\033[32m";
+        std::cout << "Profiling [PeakNodelet::populateAScanMessage()] --- " << std::chrono::duration_cast<std::chrono::microseconds>(end_1-begin).count() << " us" << std::endl;
+        std::cout << "\033[0m";
+    }
+
+    ascan_publisher_.publish(ltpa_msg_);
+
+    if (profile_) {
+        end_2 = std::chrono::high_resolution_clock::now();
+        std::cout << "\033[32m";
+        std::cout << "Profiling [ascan_publisher_.publish(ltpa_msg_)] --- " << std::chrono::duration_cast<std::chrono::microseconds>(end_2-end_1).count() << " us" << std::endl;
+        std::cout << "\033[0m";
+    }
+
+    populateBScanMessage(ltpa_msg_);
+
+    if (profile_) {
+        end_3 = std::chrono::high_resolution_clock::now();
+        std::cout << "\033[32m";
+        std::cout << "Profiling [PeakNodelet::populateBScanMessage(ltpa_msg_)] --- " << std::chrono::duration_cast<std::chrono::microseconds>(end_3-end_2).count() << " us" << std::endl;
+        std::cout << "\033[0m";
+    }
+
+    bscan_publisher_.publish(bscan_cloud_);
+
+    if (profile_) {
+        end_4 = std::chrono::high_resolution_clock::now();
+        std::cout << "\033[32m";
+        std::cout << "Profiling [bscan_publisher_.publish(bscan_cloud_)] --- " << std::chrono::duration_cast<std::chrono::microseconds>(end_4-end_3).count() << " us" << std::endl;
+        std::cout << "\033[0m";
+    }
+
+    gated_bscan_publisher_.publish(gated_bscan_cloud_);
+    gate_top_publisher_.publish(gate_top_cloud_);
+    gate_bottom_publisher_.publish(gate_bottom_cloud_);
+
+    if (profile_) {
+        end_5 = std::chrono::high_resolution_clock::now();
+        std::cout << "\033[32m";
+        std::cout << "Profiling [publish gated + gate top + gate bottom] --- " << std::chrono::duration_cast<std::chrono::microseconds>(end_5-end_4).count() << " us" << std::endl;
+        std::cout << "\033[0m";
+    }
+}
+
+
 void PeakNodelet::populateAScanMessage() {
     ltpa_msg_.header.stamp = ros::Time::now();
     ltpa_msg_.ascans.clear();
 
-    for (auto ascan : ltpa_data_ptr_->ascans) {
+    for (auto& ascan : latest_data_.ascans) {
         peak_ros::Ascan ascan_msg;
         ascan_msg.count = ascan.header.count;
         ascan_msg.test_number = ascan.header.testNo;
         ascan_msg.dof = ascan.header.dof;
         ascan_msg.channel = ascan.header.channel;
-        ascan_msg.amplitudes = ascan.amps;
-        ltpa_msg_.ascans.push_back(ascan_msg);
+        ascan_msg.amplitudes = std::move(ascan.amps);
+        ltpa_msg_.ascans.push_back(std::move(ascan_msg));
     }
 
-    ltpa_msg_.max_amplitude = ltpa_data_ptr_->max_amplitude;
+    ltpa_msg_.max_amplitude = latest_data_.max_amplitude;
 }
 
 
@@ -885,11 +885,30 @@ void PeakNodelet::populateBScanMessage(const peak_ros::Observation& obs_msg) {
 }
 
 
+void PeakNodelet::onDataReady(bool /*valid*/) {
+    // Called from the async I/O thread when new data arrives.
+    // Schedule a one-shot timer with zero duration to process data
+    // on the ROS callback queue immediately, rather than waiting
+    // for the next periodic timer tick (up to 50ms latency saved).
+    ros::NodeHandle& nh = getMTNodeHandle();
+    nh.createTimer(ros::Duration(0.0),
+        [this](const ros::TimerEvent&) {
+            std::lock_guard<std::mutex> lock(processing_mutex_);
+            if (stream_ && peak_handler_.getLatestData(latest_data_)) {
+                processMeasurement();
+            }
+        }, true /* oneshot */, true /* autostart */);
+}
+
+
 void PeakNodelet::timerCb(const ros::TimerEvent& /*event*/){
     NODELET_INFO_STREAM_THROTTLE(600, node_name_ << ": Node running");
     if (stream_) {
         NODELET_INFO_STREAM_THROTTLE(60, node_name_ << ": Streaming data...");
-        takeMeasurement();
+        std::lock_guard<std::mutex> lock(processing_mutex_);
+        if (peak_handler_.getLatestData(latest_data_)) {
+            processMeasurement();
+        }
     } else {
         NODELET_INFO_STREAM_THROTTLE(60, node_name_ << ": Not streaming data...");
     }

@@ -5,7 +5,7 @@
     <!-- <arg name="configuration" default="roller_probe_100_MHz.yaml" /> -->
     <arg name="configuration" default="beccas.yaml" />
 
-    <!-- <arg name="mps_file" default="composite_roller_probe/roller_probe_wing_cover_100_MHz.mps" /> -->
+    <arg name="mps_file" default="composite_roller_probe/roller_probe_wing_cover_100_MHz.mps" />
     <!-- <arg name="mps_file" default="Immersion_5MHz_NoFocus.mps" /> -->
     <!-- <arg name="mps_file" default="immersion_128el_2aperture_20mmdeep.mps" />     -->
     <!-- <arg name="mps_file" default="immersion_128el_2aperture.mps" /> -->
@@ -17,7 +17,7 @@
     <!-- <arg name="mps_file" default="immersion_64el_2aperture.mps" /> -->
     <!-- <arg name="mps_file" default="Immersion_64el_1aperture.mps" /> -->
     <!-- <arg name="mps_file" default="immersion_64el.mps" /> -->
-    <arg name="mps_file" default="immersion_64el_16aperture.mps" />
+    <!-- <arg name="mps_file" default="immersion_64el_16aperture.mps" /> -->
     <!-- <arg name="mps_file" default="Immersion_64el_24aperture.mps" /> -->
 
     <arg name="export_pcd" default="true" />
@@ -99,12 +99,12 @@
     <node pkg="rviz" type="rviz" name="rviz_peak" args="-d $(find peak_ros)/config/bscan.rviz" if="$(arg rviz)" />
 
 <!--     TF for Frontwall Depth Text. Orig 0 0 1.2 0 0 0 -->
- <!--   <node pkg="tf2_ros" type="static_transform_publisher" name="frontwall_depth_tf" 
-        args="0 0 -0.017 0 0 0 ltpa frontwall_depth" /> -->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="frontwall_depth_tf" 
+        args="0 0 -0.017 0 0 0 ltpa frontwall_depth" />
 
     <!-- TF for Text. Orig 0 0 1.2 0 0 0 -->
-    <!-- <node pkg="tf2_ros" type="static_transform_publisher" name="frontwall_angle_tf" 
-        args="0 0 -0.01 0 0 0 ltpa frontwall_angle" />  --> -->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="frontwall_angle_tf" 
+        args="0 0 -0.01 0 0 0 ltpa frontwall_angle" />  --> 
 
     <!-- Conversion... To be commented out once robot transform established -->
     <node pkg="tf2_ros" type="static_transform_publisher" name="ltpa_world" 

@@ -4,6 +4,8 @@
 #include <cstdlib>
 #include <signal.h>
 #include <vector>
+#include <atomic>
+#include <mutex>
 
 #include <ros/ros.h>
 #include <ros/package.h>
@@ -39,6 +41,7 @@ namespace peak_namespace {
 class PeakNodelet : public nodelet::Nodelet {
 public:
     PeakNodelet();
+    ~PeakNodelet();
 
 private:
     virtual void                       onInit();
@@ -57,9 +60,11 @@ private:
     bool                               takeMeasurementSrvCb(peak_ros::TakeSingleMeasurement::Request& request,
                                                             peak_ros::TakeSingleMeasurement::Response& response);
     void                               takeMeasurement();
+    void                               processMeasurement();
     void                               populateAScanMessage();
     void                               populateBScanMessage(const peak_ros::Observation& obs_msg);
     void                               timerCb(const ros::TimerEvent& /*event*/);
+    void                               onDataReady(bool valid);
     void                               reconfigureCallback(peak_ros::dynamic_variablesConfig &config, uint32_t level);
 
     void                               publishDepthMarker(float avg_depth);
@@ -126,7 +131,7 @@ private:
     // Data
     // -------------------------------------------------------------------
     PeakHandler                        peak_handler_;
-    const PeakHandler::OutputFormat*   ltpa_data_ptr_;
+    PeakHandler::OutputFormat          latest_data_;
 
     peak_ros::Observation              ltpa_msg_;
     sensor_msgs::PointCloud2           bscan_cloud_;
@@ -134,7 +139,8 @@ private:
     sensor_msgs::PointCloud2           gate_top_cloud_;
     sensor_msgs::PointCloud2           gate_bottom_cloud_;
 
-    bool                               stream_;
+    std::atomic<bool>                  stream_{false};
+    std::mutex                         processing_mutex_;
 
     // -------------------------------------------------------------------
     // Front wall tracking

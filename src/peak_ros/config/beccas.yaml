@@ -1,7 +1,7 @@
 peak_address:    "10.1.1.2"
 peak_port:             1067
 
-acquisition_rate:        10
+acquisition_rate:        20
 digitisation_rate:      100 # 0, 10, 25, 50 or 100 (0 = use default)
 frame_id: "ltpa"
 
@@ -11,7 +11,7 @@ profile:              false     # Profiling output for PeakNodelet::takeMeasurem
 
 boundary_conditions:
 
-  n_focals:                81   # number of focal laws (num_elements - aperture + 1)
+  n_focals:                61   # number of focal laws (num_elements - aperture + 1)
   element_pitch:          0.5   # mm
   inter_element_spacing:  0.1   # mm
   element_width:         10.0   # mm
