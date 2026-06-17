@@ -6,7 +6,6 @@ Panels:
       Expanded:
         - /Global Options1
         - /Status1
-        - /b_scan1/Status1
       Splitter Ratio: 0.5286624431610107
     Tree Height: 839
   - Class: rviz/Selection
@@ -26,7 +25,7 @@ Panels:
   - Class: rviz/Time
     Name: Time
     SyncMode: 0
-    SyncSource: b_scan
+    SyncSource: gated_b_scan
 Preferences:
   PromptSaveOnExit: true
 Toolbars:
@@ -89,7 +88,7 @@ Visualization Manager:
       Channel Name: Amplitudes
       Class: rviz/PointCloud2
       Color: 255; 255; 255
-      Color Transformer: Intensity
+      Color Transformer: CustomRangeColorTransformer
       Decay Time: 0
       Enabled: false
       Invert Rainbow: true
@@ -134,7 +133,7 @@ Visualization Manager:
       Channel Name: Amplitudes
       Class: rviz/PointCloud2
       Color: 255; 255; 255
-      Color Transformer: Intensity
+      Color Transformer: CustomRangeColorTransformer
       Decay Time: 0
       Enabled: true
       Invert Rainbow: true
@@ -181,21 +180,21 @@ Visualization Manager:
       Use rainbow: true
       Value: true
     - Class: rviz/Marker
-      Enabled: true
+      Enabled: false
       Marker Topic: /peak/angle_text_marker
       Name: frontwall_angle
       Namespaces:
-        angle_measurement: true
+        {}
       Queue Size: 100
-      Value: true
+      Value: false
     - Class: rviz/Marker
-      Enabled: true
+      Enabled: false
       Marker Topic: /peak/depth_text_marker
       Name: frontwall_depth
       Namespaces:
-        depth_measurement: true
+        {}
       Queue Size: 100
-      Value: true
+      Value: false
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48

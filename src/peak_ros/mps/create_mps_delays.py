@@ -102,9 +102,9 @@ def merge_files(ag_content, flat_content):
 
 
 # --- Main ---
-ag_file_path   = 'AG_immersion.mps'    # Document 1 (with AG. headers and focal delays)
-flat_file_path = 'immersion_128el_20aperture_60delay.mps'  # Document 2 (all zeros, to be updated)
-output_path    = 'merged_128el_20aperture_30delay.mps'
+ag_file_path   = 'ArrayGen_Focal_Depth33_5.mps'    # Document 1 (with AG. headers and focal delays)
+flat_file_path = 'immersion_128el_20aperture_60delay_orig.mps'  # Document 2 (all zeros, to be updated)
+output_path    = 'merged_128el_20aperture_33_5delay.mps'
 
 with open(ag_file_path, 'r') as f:
     ag_content = f.read()
