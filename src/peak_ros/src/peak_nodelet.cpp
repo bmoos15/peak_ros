@@ -388,22 +388,28 @@ std::vector<float> PeakNodelet::computeHilbertReal(const std::vector<int>& signa
     int n = static_cast<int>(signal.size());
     if (n == 0) return {};
 
-    // --- Forward FFT: real -> complex (r2c produces n/2+1 bins) ---
-    double*       in       = fftw_alloc_real(n);
-    fftw_complex* freq     = fftw_alloc_complex(n / 2 + 1);
-    fftw_complex* full     = fftw_alloc_complex(n);
-    fftw_complex* analytic = fftw_alloc_complex(n);
+    // Zero-pad to 2× length so the signal decays before the circular wrap
+    // point, preventing the FFT from creating false envelope at the start.
+    int nfft = 2 * n;
+
+    // --- Forward FFT: real -> complex (r2c produces nfft/2+1 bins) ---
+    double*       in       = fftw_alloc_real(nfft);
+    fftw_complex* freq     = fftw_alloc_complex(nfft / 2 + 1);
+    fftw_complex* full     = fftw_alloc_complex(nfft);
+    fftw_complex* analytic = fftw_alloc_complex(nfft);
 
     for (int k = 0; k < n; ++k)
         in[k] = static_cast<double>(signal[k]);
+    for (int k = n; k < nfft; ++k)
+        in[k] = 0.0;
 
-    fftw_plan plan_fwd = fftw_plan_dft_r2c_1d(n, in, freq, FFTW_ESTIMATE);
+    fftw_plan plan_fwd = fftw_plan_dft_r2c_1d(nfft, in, freq, FFTW_ESTIMATE);
     fftw_execute(plan_fwd);
     fftw_destroy_plan(plan_fwd);
     fftw_free(in);
 
     // --- Expand r2c bins to full spectrum and apply Hilbert weighting ---
-    int half = n / 2;
+    int half = nfft / 2;
 
     full[0][0] = freq[0][0];   // DC — unchanged
     full[0][1] = freq[0][1];
@@ -413,12 +419,12 @@ std::vector<float> PeakNodelet::computeHilbertReal(const std::vector<int>& signa
         full[k][1] = 2.0 * freq[k][1];
     }
 
-    if (n % 2 == 0) {                  // Nyquist (even n only) — unchanged
+    if (nfft % 2 == 0) {               // Nyquist (even nfft only) — unchanged
         full[half][0] = freq[half][0];
         full[half][1] = freq[half][1];
     }
 
-    for (int k = half + 1; k < n; ++k) {  // negative frequencies — zero
+    for (int k = half + 1; k < nfft; ++k) {  // negative frequencies — zero
         full[k][0] = 0.0;
         full[k][1] = 0.0;
     }
@@ -426,20 +432,18 @@ std::vector<float> PeakNodelet::computeHilbertReal(const std::vector<int>& signa
     fftw_free(freq);
 
     // --- Inverse FFT: complex -> analytic signal ---
-    fftw_plan plan_inv = fftw_plan_dft_1d(n, full, analytic, FFTW_BACKWARD, FFTW_ESTIMATE);
+    fftw_plan plan_inv = fftw_plan_dft_1d(nfft, full, analytic, FFTW_BACKWARD, FFTW_ESTIMATE);
     fftw_execute(plan_inv);
     fftw_destroy_plan(plan_inv);
     fftw_free(full);
 
-    // --- Extract real part, normalise by N ---
+    // --- Extract envelope for first n samples only, normalise by nfft ---
     std::vector<float> result(n);
-    const double inv_n = 1.0 / static_cast<double>(n);
-    // for (int k = 0; k < n; ++k)
-    //     result[k] = static_cast<float>(analytic[k][0] * inv_n);
+    const double inv_n = 1.0 / static_cast<double>(nfft);
     for (int k = 0; k < n; ++k) {
         double re = analytic[k][0] * inv_n;
         double im = analytic[k][1] * inv_n;
-        result[k] = static_cast<float>(std::sqrt(re * re + im * im)); // <-- magnitude
+        result[k] = static_cast<float>(std::sqrt(re * re + im * im));
     }
 
     fftw_free(analytic);

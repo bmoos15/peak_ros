@@ -289,7 +289,7 @@ def save_ply(diameters, dB, path, defect_idx, circle):
         name = 'Circle'
 
     # dtype = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('amplitude', 'f4')]
-    dtype_thresh_cross = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
+    dtype_thresh_cross = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u2'), ('green', 'u1'), ('blue', 'u1')]
 
     # # Main point cloud
     # records = np.array(
@@ -317,16 +317,16 @@ def main():
     Gain = 135
     TVG = 8
 
-    spoiler = False
+    spoiler = True
 
-    amp_buffer = 0.015 
+    amp_buffer = 0.1
 
-    x_tolerance = 0.0002
-    y_tolerance = 0.002
+    # x_tolerance = 0.0002
+    # y_tolerance = 0.002
 
     num_angles = 4
 
-    base_path = f'/home/rebecca/ut_servoing/src/peak_ros/src/peak_ros/bags/New_angle/Flat/Hilbert_no_norm/Gain{Gain}_{TVG}TVG/'
+    base_path = f'/home/rebecca/fast_ut_servoing/src/peak_ros/src/peak_ros/bags/manual_flat_with_encoder_angle/'
 
     # -----------------------------------------------------------------------
     # Redirect all print() output to both the terminal and a summary txt file
@@ -340,6 +340,8 @@ def main():
     #            f'Defect_05_{Gain}Gain_{TVG}TVG', f'Defect_06_{Gain}Gain_{TVG}TVG',
     #            f'Defect_07_{Gain}Gain_{TVG}TVG', f'Defect_08_{Gain}Gain_{TVG}TVG',
     #            f'Defect_09_{Gain}Gain_{TVG}TVG', f'Defect_10_{Gain}Gain_{TVG}TVG']
+
+    # defects = [f'Defect_06_{Gain}Gain_{TVG}TVG']
 
     defects = [f'Defect_5', f'Defect_6']
 
@@ -400,11 +402,11 @@ def main():
             cx, cy, average_diameter = res.x[0], res.x[1], res.x[2] * 2
 
             if spoiler and defect_idx in (0, 1, 2, 3, 4):
-                target = 0.003
+                target = 0.005
             elif spoiler and defect_idx in (5, 6, 7, 8, 9):
                 target = 0.004
             else:
-                target = 0.005
+                target = 0.003
 
 
             error = (average_diameter - target)*1000

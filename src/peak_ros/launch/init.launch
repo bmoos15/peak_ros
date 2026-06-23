@@ -12,9 +12,9 @@
     <!-- <arg name="mps_file" default="immersion_128el_8aperture.mps" /> -->
     <!-- <arg name="mps_file" default="immersion_128el_16aperture.mps" /> -->
     <!-- <arg name="mps_file" default="immersion_100el_20aperture_60Focus.mps" /> -->
-    <arg name="mps_file" default="merged_128el_20aperture_60delay.mps" />
+    <!-- <arg name="mps_file" default="merged_128el_20aperture_60delay.mps" /> -->
     <!-- <arg name="mps_file" default="merged_128el_20aperture_33_5delay.mps" /> -->
-    <!-- <arg name="mps_file" default="spoiler_128el_20aperture.mps" />         -->
+    <arg name="mps_file" default="spoiler_128el_20aperture.mps" />        
     <!-- <arg name="mps_file" default="immersion_64el_2aperture.mps" /> -->
     <!-- <arg name="mps_file" default="Immersion_64el_1aperture.mps" /> -->
     <!-- <arg name="mps_file" default="immersion_64el.mps" /> -->
@@ -65,9 +65,9 @@
             <rosparam>
             filter_field_name: z
             filter_limit_min: 0.0001
-            filter_limit_max: 0.5
+            filter_limit_max: 0.8
             filter_limit_negative: False
-            leaf_size: 0.0001
+            leaf_size: 0.00005
             </rosparam>
             <!-- leaf_size: 0.00005 -->
         </node>
@@ -100,15 +100,15 @@
     <node pkg="rviz" type="rviz" name="rviz_peak" args="-d $(find peak_ros)/config/bscan.rviz" if="$(arg rviz)" />
 
 <!--     TF for Frontwall Depth Text. Orig 0 0 1.2 0 0 0 -->
-<!--     <node pkg="tf2_ros" type="static_transform_publisher" name="frontwall_depth_tf" 
+    <node pkg="tf2_ros" type="static_transform_publisher" name="frontwall_depth_tf" 
         args="0 0 -0.017 0 0 0 ltpa frontwall_depth" />
- -->
+
     <!-- TF for Text. Orig 0 0 1.2 0 0 0 -->
-<!--     <node pkg="tf2_ros" type="static_transform_publisher" name="frontwall_angle_tf" 
-        args="0 0 -0.01 0 0 0 ltpa frontwall_angle" />  -->  -->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="frontwall_angle_tf" 
+        args="0 0 -0.01 0 0 0 ltpa frontwall_angle" />   
 
     <!-- Conversion... To be commented out once robot transform established -->
-    <node pkg="tf2_ros" type="static_transform_publisher" name="ltpa_world" 
-        args="0 0 0 0 0 0 base_link ltpa" /> 
+<!--     <node pkg="tf2_ros" type="static_transform_publisher" name="ltpa_world" 
+        args="0 0 0 0 0 0 base_link ltpa" />  -->
 
 </launch>
